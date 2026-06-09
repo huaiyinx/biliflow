@@ -255,4 +255,4 @@ MIT
 
 ---
 
-**Built by huaiyinx** — 2026
+**Built with ❤️ by huaiyinx** — 2026
