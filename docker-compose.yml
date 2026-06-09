@@ -1,0 +1,26 @@
+services:
+  bili-flow:
+    build: .
+    container_name: bili-flow
+    ports:
+      - "8866:8866"
+    volumes:
+      # Obsidian vault (笔记输出)
+      - /data/obsidian-vault:/data/obsidian-vault:rw
+      # SQLite + 持久化数据
+      - ./data:/app/data
+      # 临时工作目录
+      - ./projects:/app/projects
+      # bili CLI 凭据持久化（扫码登录后保存）
+      - ./bili-cred:/root/.bilibili-cli:rw
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    external: true

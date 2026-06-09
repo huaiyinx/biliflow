@@ -1,0 +1,15 @@
+# B站 Cookie（敏感信息）
+.env
+bili-cred/
+
+# SQLite 数据库
+data/*.db
+
+# 临时文件
+projects/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Docker
+docker-compose.override.yml

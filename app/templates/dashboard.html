@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ up_name }} · 笔记重构</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f0f1a;color:#e0e0f0;padding:24px;min-height:100vh}
+.container{max-width:800px;margin:0 auto}
+h1{font-size:1.5rem;margin-bottom:4px;color:#a78bfa}
+.subtitle{color:#6b7280;font-size:.85rem;margin-bottom:24px}
+.back-link{display:inline-block;margin-bottom:16px;color:#9ca3af;font-size:.8rem}
+.pipeline{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+.stage{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:8px;padding:8px 14px;font-size:.82rem;color:#9ca3af}
+.stage.active{border-color:#a78bfa;color:#c4b5fd;background:#1a102e}
+.stage.done{border-color:#34d399;color:#6ee7b7;background:#0a1a14}
+.card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:20px;margin-bottom:16px}
+.card h3{font-size:.9rem;color:#9ca3af;margin-bottom:12px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{text-align:center}
+.stat .num{font-size:2rem;font-weight:700}
+.stat .num.ok{color:#34d399}
+.stat .num.pending{color:#fbbf24}
+.stat .num.fail{color:#f87171}
+.stat .label{font-size:.78rem;color:#6b7280;margin-top:4px}
+.progress-wrap{margin-bottom:12px}
+.progress-bar{height:28px;background:#2d2d4a;border-radius:14px;overflow:hidden;position:relative}
+.progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#a78bfa);border-radius:14px;transition:width .5s ease;display:flex;align-items:center;justify-content:flex-end;padding-right:12px;font-size:.8rem;font-weight:600;color:#fff;min-width:45px}
+.progress-text{font-size:.8rem;color:#9ca3af;text-align:center;margin-top:6px}
+.recent{max-height:360px;overflow-y:auto}
+.recent-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #2d2d4a;font-size:.82rem}
+.recent-item:last-child{border-bottom:none}
+.recent-item .icon{font-size:1rem;width:24px;text-align:center}
+.recent-item .title{flex:1;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-item .tag{font-size:.68rem;padding:2px 6px;border-radius:4px}
+.recent-item .tag.ok{background:#064e3b;color:#34d399}
+.recent-item .tag.fail{background:#4a1d1d;color:#f87171}
+.recent-item .tag.cli{background:#1a2e1a;color:#4ade80}
+.recent-item .tag.sv{background:#2e2a1a;color:#fbbf24}
+.refresh{text-align:center;font-size:.75rem;color:#4b5563;margin-top:16px}
+.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media(max-width:480px){
+  body{padding:12px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stat .num{font-size:1.5rem}
+  .pipeline{gap:4px}
+  .stage{padding:6px 10px;font-size:.72rem}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="/up/{{ up_name }}" class="back-link">← 返回详情</a>
+<h1>{{ up_name }} · Phase 3 全量重构</h1>
+<p class="subtitle">bili CLI → yt-dlp → SenseVoice → Gemini → Obsidian</p>
+<div class="pipeline">
+  <div class="stage active" id="stageCLI">📡 bili CLI</div>
+  <div class="stage" id="stageDL">⬇️ yt-dlp</div>
+  <div class="stage" id="stageSV">🎤 SenseVoice</div>
+  <div class="stage" id="stageLLM">🤖 Gemini</div>
+  <div class="stage" id="stageOB">📝 Obsidian</div>
+</div>
+<div class="card">
+  <h3>📊 总体进度</h3>
+  <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%">0%</div></div></div>
+  <div class="progress-text" id="progressInfo">初始化...</div>
+  <div class="stats">
+    <div class="stat"><div class="num ok" id="statOk">0</div><div class="label">✅ 成功</div></div>
+    <div class="stat"><div class="num pending" id="statPend">0</div><div class="label">⏳ 待处理</div></div>
+    <div class="stat"><div class="num fail" id="statFail">0</div><div class="label">❌ 失败</div></div>
+    <div class="stat"><div class="num" style="color:#fbbf24" id="statSV">0</div><div class="label">🎤 SV备选</div></div>
+  </div>
+  <div class="stats" style="grid-template-columns:repeat(2,1fr)">
+    <div class="stat"><div class="num" style="color:#a78bfa;font-size:1.5rem" id="statRate">0</div><div class="label">📝 速度(篇/分)</div></div>
+    <div class="stat"><div class="num" style="color:#6b7280;font-size:1.5rem" id="statEta">-</div><div class="label">⏱️ 预计剩余</div></div>
+  </div>
+</div>
+<div class="card">
+  <h3>🔄 最近处理</h3>
+  <div class="recent" id="recentList"><div style="color:#6b7280;text-align:center;padding:20px">等待流水线产出...</div></div>
+</div>
+<p class="refresh pulse" id="refreshText">🔄 每 2 秒自动刷新 · <span id="lastTime">--</span></p>
+</div>
+<script>
+const PROGRESS_URL='/api/up/{{ up_name }}/progress';
+let items=[],lastC=0,st=Date.now();
+async function check(){
+ try{
+  const r=await fetch(PROGRESS_URL+'?t='+Date.now());
+  if(!r.ok)throw new Error('nf');
+  const d=await r.json();
+  const pct=d.pct||0,total=d.total||0,cur=d.current||0,ok=d.ok||0,fail=d.fail||0,sv=d.sv_fallback||0,done=d.done||0,pro=ok+fail;
+  document.getElementById('progressFill').style.width=Math.max(pct,1)+'%';
+  document.getElementById('progressFill').textContent=pct+'%';
+  document.getElementById('statOk').textContent=ok;
+  document.getElementById('statPend').textContent=Math.max(0,total-cur);
+  document.getElementById('statFail').textContent=fail;
+  document.getElementById('statSV').textContent=sv;
+  const elapsed=Math.max((Date.now()-st)/60000,.1);
+  document.getElementById('statRate').textContent=(pro/elapsed).toFixed(1);
+  const rem=total-cur,eta=pro>0?Math.round(rem/(pro/elapsed)):0;
+  document.getElementById('statEta').textContent=eta>0?eta+' 分钟':'-';
+  document.getElementById('progressInfo').textContent=`${cur}/${total} · 完成 ${ok} · 失败 ${fail}`;
+  if(cur>lastC&&d.last){
+    items.unshift({title:d.last,status:d.last_status||'ok',src:d.last_src||'',time:new Date().toLocaleTimeString()});
+    if(items.length>25)items.pop(); lastC=cur;
+  }
+  document.getElementById('recentList').innerHTML=items.map(i=>
+    `<div class="recent-item"><span class="icon">${i.status==='ok'?'✅':'❌'}</span><span class="title">${i.title}</span><span class="tag ${i.status}">${i.status==='ok'?'成功':'失败'}</span><span class="tag ${i.src==='CLI'?'cli':'sv'}">${i.src||''}</span><span style="color:#6b7280;font-size:.72rem">${i.time}</span></div>`
+  ).join('')||'<div style="color:#6b7280;text-align:center;padding:20px">等待流水线产出...</div>';
+  document.getElementById('lastTime').textContent=new Date().toLocaleTimeString();
+  if(done){document.getElementById('refreshText').classList.remove('pulse');document.getElementById('refreshText').innerHTML='🎉 全部完成！'}
+ }catch(e){document.getElementById('refreshText').textContent='⏳ 等待启动... · '+new Date().toLocaleTimeString()}
+}
+check();setInterval(check,2000);
+</script>
+</body>
+</html>

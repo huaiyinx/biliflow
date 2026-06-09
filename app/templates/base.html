@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BiliFlow · {% block title %}B站笔记工坊{% endblock %}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f0f1a;color:#e0e0f0;min-height:100vh}
+a{color:#a78bfa;text-decoration:none}
+a:hover{color:#c4b5fd}
+nav{background:#1a1a2e;border-bottom:1px solid #2d2d4a;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+nav .logo{font-size:1.2rem;font-weight:700;color:#a78bfa}
+nav .logo span{color:#6b7280;font-weight:400;font-size:.85rem;margin-left:8px}
+nav a.nav-link{font-size:.85rem;color:#9ca3af;padding:6px 12px;border-radius:6px;transition:all .2s}
+nav a.nav-link:hover{color:#e0e0f0;background:#2d2d4a}
+.container{max-width:960px;margin:0 auto;padding:24px}
+.flash{background:#1a2e1a;border:1px solid #34d399;color:#34d399;padding:12px 20px;border-radius:8px;margin-bottom:20px;font-size:.85rem}
+.card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:20px;margin-bottom:16px}
+.card h3{font-size:.9rem;color:#9ca3af;margin-bottom:12px}
+.btn{display:inline-block;padding:8px 20px;border-radius:8px;font-size:.85rem;font-weight:500;cursor:pointer;border:none;transition:all .15s;text-decoration:none}
+.btn-primary{background:#7c3aed;color:#fff}
+.btn-primary:hover{background:#6d28d9}
+.btn-secondary{background:#2d2d4a;color:#e0e0f0}
+.btn-secondary:hover{background:#3d3d5a}
+.btn-danger{background:#4a1d1d;color:#f87171}
+.btn-danger:hover{background:#5a2d2d}
+.btn-sm{padding:4px 12px;font-size:.75rem}
+.tag{display:inline-block;padding:3px 8px;border-radius:4px;font-size:.72rem;font-weight:500}
+.tag-done{background:#064e3b;color:#34d399}
+.tag-pending{background:#2e2a1a;color:#fbbf24}
+.tag-fail{background:#4a1d1d;color:#f87171}
+.tag-processing{background:#1a102e;color:#a78bfa}
+input,select{background:#0f0f1a;border:1px solid #2d2d4a;color:#e0e0f0;padding:10px 14px;border-radius:8px;font-size:.9rem;width:100%}
+input:focus{outline:none;border-color:#7c3aed}
+footer{text-align:center;padding:40px 24px;color:#4b5563;font-size:.75rem}
+@media(max-width:600px){.container{padding:12px}nav{padding:10px 12px;gap:12px}}
+{% block extra_head %}{% endblock %}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo">🎬 BiliFlow <span>B站笔记工坊</span></a>
+  <a href="/" class="nav-link">📊 总控面板</a>
+  <a href="/add" class="nav-link">➕ 添加UP主</a>
+  <div style="flex:1"></div>
+  <div id="userWidget" style="display:flex;align-items:center;gap:8px">
+    <a href="/login" class="nav-link">🔐 登录B站</a>
+  </div>
+</nav>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+<footer>BiliFlow · Powered by bili CLI + SenseVoice + Gemini · {{ domain }}</footer>
+<script>
+// 加载当前 B站 用户信息
+(async function(){
+  try{
+    const r = await fetch('/api/me');
+    const d = await r.json();
+    const widget = document.getElementById('userWidget');
+    if(d.logged_in){
+      const initial = d.name.charAt(0);
+      const colors = ['#7c3aed','#a78bfa','#f472b6','#34d399','#fbbf24','#f87171'];
+      const color = colors[d.uid.charCodeAt(0) % colors.length];
+      widget.innerHTML = `
+        <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:.75rem;color:#fff;font-weight:600;flex-shrink:0">${initial}</div>
+        <span style="font-size:.82rem;color:#c4b5fd;font-weight:500">${d.name}</span>
+        <span style="font-size:.68rem;background:#2d2d4a;color:#a78bfa;padding:2px 6px;border-radius:4px">Lv${d.level}</span>
+      `;
+      widget.title = d.sign || '';
+    }
+  }catch(e){}
+})();
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

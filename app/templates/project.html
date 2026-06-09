@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ up.name }} · 详情{% endblock %}
+{% block extra_head %}
+<style>
+.up-info{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+.up-info img{width:60px;height:60px;border-radius:50%}
+.up-info h1{margin:0;font-size:1.3rem}
+.up-info .uid{font-size:.8rem;color:#6b7280}
+.action-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.video-list{max-height:70vh;overflow-y:auto}
+.video-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #2d2d4a;font-size:.83rem;transition:background .15s}
+.video-item:hover{background:#1a1a2e}
+.video-item .v-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d1d5db}
+.video-item .v-meta{font-size:.72rem;color:#6b7280;white-space:nowrap}
+.empty-section{text-align:center;padding:30px;color:#6b7280}
+</style>
+{% endblock %}
+{% block content %}
+<div class="up-info">
+  {% if up.avatar %}<img src="{{ up.avatar }}" alt="{{ up.name }}">{% endif %}
+  <div>
+    <h1>{{ up.name }}</h1>
+    <div class="uid">UID: {{ up.uid }} · 订阅于 {{ up.created_at[:10] }}</div>
+  </div>
+</div>
+
+<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+  <div class="stat-card"><div class="num" style="color:#a78bfa">{{ up.total_videos }}</div><div class="label">📹 总视频</div></div>
+  <div class="stat-card"><div class="num" style="color:#34d399">{{ up.processed_videos }}</div><div class="label">✅ 已完成</div></div>
+  <div class="stat-card"><div class="num" style="color:#fbbf24">{{ up.total_videos - up.processed_videos - up.failed_videos }}</div><div class="label">⏳ 待处理</div></div>
+  <div class="stat-card"><div class="num" style="color:#f87171">{{ up.failed_videos }}</div><div class="label">❌ 失败</div></div>
+</div>
+
+<div class="action-bar">
+  <a href="/up/{{ up.name }}/dashboard" class="btn btn-primary">📊 实时看板</a>
+  {% if up.status != 'processing' %}
+  <button class="btn btn-primary" onclick="triggerProcess('{{ up.name }}')">▶️ 开始处理</button>
+  <button class="btn btn-secondary" onclick="triggerScan('{{ up.name }}')">🔍 扫描新视频</button>
+  {% endif %}
+  {% if up.failed_videos > 0 %}
+  <button class="btn btn-secondary" onclick="retryFailed('{{ up.name }}')">🔄 重试失败</button>
+  {% endif %}
+  <button class="btn btn-danger" onclick="deleteUp('{{ up.name }}')">🗑️ 删除</button>
+</div>
+
+<p id="statusBar" style="font-size:.82rem;color:#6b7280;margin-bottom:12px;min-height:20px"></p>
+
+<div class="card">
+<h3>📹 视频列表 ({{ videos|length }})</h3>
+<div class="video-list">
+{% for v in videos %}
+<div class="video-item">
+  <span style="font-size:1rem">
+    {% if v.status == 'done' or v.status == 'ok' %}✅
+    {% elif v.status == 'failed' %}❌
+    {% elif v.status == 'processing' %}🔄
+    {% else %}⏳{% endif %}
+  </span>
+  <span class="v-title" title="{{ v.title }}">{{ v.title }}</span>
+  <span class="v-meta">{{ v.duration }} · {{ v.play_count }}播放</span>
+  <span class="tag
+    {% if v.status == 'done' or v.status == 'ok' %}tag-done{% elif v.status == 'failed' %}tag-fail{% elif v.status == 'processing' %}tag-processing{% else %}tag-pending{% endif %}
+  ">{{ v.status or 'pending' }}</span>
+  {% if v.source %}<span style="color:#6b7280;font-size:.68rem">{{ v.source }}</span>{% endif %}
+</div>
+{% endfor %}
+{% if not videos %}
+<div class="empty-section">暂无视频，点击"扫描新视频"</div>
+{% endif %}
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function showStatus(msg){document.getElementById('statusBar').textContent=msg}
+async function triggerProcess(name){
+  showStatus('⏳ 启动处理...');
+  try{const r=await fetch(`/api/up/${name}/process`,{method:'POST'});const d=await r.json();
+    showStatus(d.status==='started'?`✅ 已启动 (${d.count}个视频)`:'⚠️ '+d.message);
+    setTimeout(()=>location.reload(),2000);
+  }catch(e){showStatus('❌ 请求失败')}
+}
+async function triggerScan(name){
+  showStatus('🔍 扫描新视频...');
+  try{const r=await fetch(`/api/up/${name}/scan`,{method:'POST'});const d=await r.json();
+    showStatus(`🔍 ${d.status}`);setTimeout(()=>location.reload(),2000);
+  }catch(e){showStatus('❌ 请求失败')}
+}
+async function retryFailed(name){
+  showStatus('🔄 重试失败视频...');
+  try{const r=await fetch(`/api/up/${name}/retry-failed`,{method:'POST'});const d=await r.json();
+    showStatus(d.status==='started'?`✅ 重试 ${d.count} 个`:'⚠️ '+d.message);
+    setTimeout(()=>location.reload(),2000);
+  }catch(e){showStatus('❌ 请求失败')}
+}
+async function deleteUp(name){
+  if(!confirm(`确定删除 "${name}" 吗？笔记文件会保留`))return;
+  try{await fetch(`/api/up/${name}`,{method:'DELETE'});
+    window.location.href='/';
+  }catch(e){showStatus('❌ 删除失败')}
+}
+</script>
+{% endblock %}

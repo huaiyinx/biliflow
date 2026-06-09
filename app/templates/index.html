@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}总控面板{% endblock %}
+{% block extra_head %}
+<style>
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:16px;text-align:center}
+.stat-card .num{font-size:2rem;font-weight:700}
+.stat-card .label{font-size:.78rem;color:#6b7280;margin-top:4px}
+.up-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.up-card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:20px;transition:border-color .2s;display:flex;flex-direction:column;gap:12px}
+.up-card:hover{border-color:#7c3aed}
+.up-card .up-header{display:flex;align-items:center;gap:12px}
+.up-card .up-avatar{width:40px;height:40px;border-radius:50%;background:#2d2d4a;overflow:hidden;flex-shrink:0}
+.up-card .up-avatar img{width:100%;height:100%;object-fit:cover}
+.up-card .up-name{font-size:1rem;font-weight:600;color:#e0e0f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up-card .progress-wrap{margin:4px 0}
+.up-card .progress-bar{height:6px;background:#2d2d4a;border-radius:3px;overflow:hidden}
+.up-card .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#a78bfa);border-radius:3px;transition:width .5s ease}
+.up-card .progress-text{font-size:.72rem;color:#6b7280;margin-top:4px}
+.up-card .up-actions{display:flex;gap:8px;flex-wrap:wrap}
+.empty{text-align:center;padding:60px 20px;color:#6b7280}
+.empty .icon{font-size:3rem;margin-bottom:16px}
+.empty p{margin-bottom:20px}
+</style>
+{% endblock %}
+{% block content %}
+<h1 style="font-size:1.4rem;margin-bottom:4px;color:#a78bfa">📊 总控面板</h1>
+<p style="color:#6b7280;font-size:.85rem;margin-bottom:8px">管理所有订阅的 B站 UP主视频笔记流水线 <span id="updateTime" style="color:#4b5563;font-size:.72rem"></span></p>
+
+<div class="stats-grid" id="statsGrid">
+  <div class="stat-card">
+    <div class="num" style="color:#a78bfa" id="statUps">{{ ups|length }}</div>
+    <div class="label">👤 订阅UP主</div>
+  </div>
+  <div class="stat-card">
+    <div class="num" style="color:#34d399" id="statDone">-</div>
+    <div class="label">✅ 已完成</div>
+  </div>
+  <div class="stat-card">
+    <div class="num" style="color:#fbbf24" id="statPending">-</div>
+    <div class="label">⏳ 待处理</div>
+  </div>
+  <div class="stat-card">
+    <div class="num" style="color:#f87171" id="statFailed">-</div>
+    <div class="label">❌ 失败</div>
+  </div>
+  <div class="stat-card">
+    <div class="num" style="color:#a78bfa" id="statProcessing">-</div>
+    <div class="label">🔄 处理中</div>
+  </div>
+</div>
+
+{% if ups %}
+<div class="up-grid">
+  {% for up in ups %}
+  <div class="up-card">
+    <div class="up-header">
+      <div class="up-avatar">
+        {% if up.avatar %}<img src="{{ up.avatar }}" alt="{{ up.name }}" loading="lazy">{% endif %}
+      </div>
+      <div class="up-name" title="{{ up.name }}">{{ up.name }}</div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:{{ (up.processed_videos / up.total_videos * 100) if up.total_videos else 0 }}%"></div>
+      </div>
+      <div class="progress-text">{{ up.processed_videos }}/{{ up.total_videos }}
+        <span style="float:right">
+          {% if up.status == 'processing' %}<span class="tag tag-processing">🔄 处理中</span>
+          {% elif up.status == 'done' %}<span class="tag tag-done">✅ 完成</span>
+          {% elif up.status == 'scanning' %}<span class="tag tag-processing">🔍 扫描</span>
+          {% else %}<span class="tag tag-pending">⏳ 空闲</span>
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="up-actions">
+      <a href="/up/{{ up.name }}" class="btn btn-secondary btn-sm">📋 详情</a>
+      <a href="/up/{{ up.name }}/dashboard" class="btn btn-secondary btn-sm">📊 看板</a>
+      {% if up.status != 'processing' %}
+      <button class="btn btn-primary btn-sm" onclick="triggerProcess('{{ up.name }}',event)">▶️ 处理</button>
+      {% endif %}
+      {% if up.failed_videos > 0 %}
+      <button class="btn btn-secondary btn-sm" onclick="retryFailed('{{ up.name }}')">🔄 重试失败</button>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <div class="icon">🎬</div>
+  <p>还没有订阅 UP主</p>
+  <a href="/add" class="btn btn-primary">➕ 添加第一个 UP主</a>
+</div>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function refreshStats(){
+  try{const r=await fetch('/api/stats');const d=await r.json();
+    document.getElementById('statUps').textContent=d.total_ups;
+    document.getElementById('statDone').textContent=d.done_videos;
+    document.getElementById('statPending').textContent=Math.max(0,d.total_videos-d.done_videos-(d.failed_videos||0));
+    document.getElementById('statFailed').textContent=d.failed_videos||0;
+    document.getElementById('statProcessing').textContent=d.processing_ups;
+  }catch(e){}
+}
+async function triggerProcess(name, e){
+  const btn=e?.target||document.querySelector(`button[onclick*="${name}"]`);
+  if(!btn)return location.reload();
+  btn.textContent='⏳...';btn.disabled=true;
+  try{const r=await fetch(`/api/up/${name}/process`,{method:'POST'});const d=await r.json();
+    btn.textContent=d.status==='started'?'✅ 已启动':'⚠️ '+d.message;
+    setTimeout(()=>location.reload(),1500);
+  }catch(ex){btn.textContent='❌ 失败';btn.disabled=false}
+}
+async function retryFailed(name){
+  try{await fetch(`/api/up/${name}/retry-failed`,{method:'POST'});setTimeout(()=>location.reload(),1000);}catch(e){}
+}
+async function refreshUpCards(){
+  try{
+    const r=await fetch('/api/up');
+    const ups=await r.json();
+    const grid=document.querySelector('.up-grid');
+    if(!grid||!ups.length)return;
+    grid.innerHTML=ups.map(up=>{
+      const pct=up.total_videos>0?Math.round(up.processed_videos/up.total_videos*100):0;
+      const statusTag=up.status==='processing'?'<span class="tag tag-processing">🔄 处理中</span>'
+        :up.status==='done'?'<span class="tag tag-done">✅ 完成</span>'
+        :up.status==='scanning'?'<span class="tag tag-processing">🔍 扫描</span>'
+        :'<span class="tag tag-pending">⏳ 空闲</span>';
+      const avatarHtml=up.avatar
+        ?`<img src="${up.avatar}" alt="${up.name}" loading="lazy" onerror="this.remove()">`
+        :'';
+      return `<div class="up-card">
+        <div class="up-header">
+          <div class="up-avatar">${avatarHtml}</div>
+          <div class="up-name" title="${up.name}">${up.name}</div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.max(pct,1)}%"></div></div>
+          <div class="progress-text">${up.processed_videos}/${up.total_videos}
+            <span style="float:right">${statusTag}</span>
+          </div>
+        </div>
+        <div class="up-actions">
+          <a href="/up/${up.name}" class="btn btn-secondary btn-sm">📋 详情</a>
+          <a href="/up/${up.name}/dashboard" class="btn btn-secondary btn-sm">📊 看板</a>
+          ${up.status!=='processing'?`<button class="btn btn-primary btn-sm" onclick="triggerProcess('${up.name}',event)">▶️ 处理</button>`:''}
+          ${up.failed_videos>0?`<button class="btn btn-secondary btn-sm" onclick="retryFailed('${up.name}')">🔄 重试失败</button>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){}
+}
+refreshStats();refreshUpCards();
+setInterval(refreshStats,5000);
+setInterval(()=>{refreshUpCards();document.getElementById('updateTime').textContent='· 更新于 '+new Date().toLocaleTimeString();},10000);
+</script>
+{% endblock %}

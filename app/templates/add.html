@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}添加 UP主{% endblock %}
+{% block extra_head %}
+<style>
+.form-card{max-width:520px;margin:40px auto}
+.form-card h1{font-size:1.3rem;color:#a78bfa;margin-bottom:8px}
+.form-card .hint{color:#6b7280;font-size:.83rem;margin-bottom:24px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:.85rem;color:#9ca3af;margin-bottom:6px}
+.result{background:#1a2e1a;border:1px solid #34d399;border-radius:8px;padding:16px;margin-top:16px;color:#34d399;font-size:.85rem;display:none}
+.result.error{background:#4a1d1d;border-color:#f87171;color:#f87171}
+.result a{color:#6ee7b7}
+</style>
+{% endblock %}
+{% block content %}
+<div class="card form-card">
+<h1>➕ 添加 UP主</h1>
+<p class="hint">粘贴 B站 UP主空间链接，自动获取全部视频并生成笔记</p>
+<form id="addForm" onsubmit="submitAdd(event)">
+  <div class="form-group">
+    <label>B站 UP主 空间链接</label>
+    <input type="url" id="urlInput" placeholder="https://space.bilibili.com/123456/video" required autofocus>
+  </div>
+  <button type="submit" class="btn btn-primary" style="width:100%;padding:12px" id="submitBtn">🔍 解析并添加</button>
+</form>
+<div id="result" class="result"></div>
+</div>
+
+<div class="card" style="max-width:520px;margin:0 auto">
+<h3>💡 使用说明</h3>
+<ul style="font-size:.82rem;color:#9ca3af;line-height:1.8;padding-left:18px">
+  <li>支持任意 B站 UP主</li>
+  <li>自动拉取全部公开视频列表</li>
+  <li>生成 Obsidian 兼容的壳笔记</li>
+  <li>自动运行流水线重构笔记内容</li>
+  <li>每 {{ 6 }} 小时自动检查新视频</li>
+  <li>笔记输出到 Obsidian vault 的 10-B站笔记/ 目录</li>
+</ul>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function submitAdd(e){
+  e.preventDefault();
+  const url=document.getElementById('urlInput').value.trim();
+  if(!url)return;
+  const btn=document.getElementById('submitBtn');
+  const result=document.getElementById('result');
+  btn.textContent='⏳ 解析中...';btn.disabled=true;
+  result.style.display='none';
+  try{
+    const fd=new FormData();fd.append('url',url);
+    const r=await fetch('/api/up',{method:'POST',body:fd});
+    const d=await r.json();
+    if(r.ok){
+      result.className='result';
+      result.innerHTML=`✅ <strong>${d.up_name}</strong> 已添加！<br>📊 <a href="/up/${d.up_name}">查看详情</a> | <a href="/up/${d.up_name}/dashboard">实时看板</a>`;
+      result.style.display='block';
+      document.getElementById('urlInput').value='';
+    }else{
+      result.className='result error';
+      result.textContent='❌ '+d.detail;
+      result.style.display='block';
+    }
+  }catch(e){
+    result.className='result error';
+    result.textContent='❌ 网络错误';
+    result.style.display='block';
+  }
+  btn.textContent='🔍 解析并添加';btn.disabled=false;
+}
+</script>
+{% endblock %}
