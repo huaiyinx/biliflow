@@ -15,7 +15,8 @@
 .up-card .up-name{font-size:1rem;font-weight:600;color:#e0e0f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .up-card .progress-wrap{margin:4px 0}
 .up-card .progress-bar{height:6px;background:#2d2d4a;border-radius:3px;overflow:hidden}
-.up-card .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#a78bfa);border-radius:3px;transition:width .5s ease}
+.up-card .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#a78bfa,#f472b6);background-size:200% 100%;border-radius:3px;transition:width .5s ease;animation:flowLight 2s linear infinite}
+@keyframes flowLight{0%{background-position:0% 50%}100%{background-position:200% 50%}}
 .up-card .progress-text{font-size:.72rem;color:#6b7280;margin-top:4px}
 .up-card .up-actions{display:flex;gap:8px;flex-wrap:wrap}
 .empty{text-align:center;padding:60px 20px;color:#6b7280}
