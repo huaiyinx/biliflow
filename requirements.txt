@@ -7,3 +7,4 @@ apscheduler==3.11.0
 bilibili-cli
 yt-dlp
 pyyaml
+av

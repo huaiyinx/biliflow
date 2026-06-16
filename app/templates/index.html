@@ -56,7 +56,7 @@
   <div class="up-card">
     <div class="up-header">
       <div class="up-avatar">
-        {% if up.avatar %}<img src="{{ up.avatar }}" alt="{{ up.name }}" loading="lazy">{% endif %}
+        {% if up.avatar %}<img src="/api/up/{{ up.id }}/avatar" alt="{{ up.name }}" loading="lazy">{% endif %}
       </div>
       <div class="up-name" title="{{ up.name }}">{{ up.name }}</div>
     </div>
@@ -131,7 +131,7 @@ async function refreshUpCards(){
         :up.status==='scanning'?'<span class="tag tag-processing">🔍 扫描</span>'
         :'<span class="tag tag-pending">⏳ 空闲</span>';
       const avatarHtml=up.avatar
-        ?`<img src="${up.avatar}" alt="${up.name}" loading="lazy" onerror="this.remove()">`
+        ?`<img src="/api/up/${up.id}/avatar" alt="${up.name}" loading="lazy" onerror="this.remove()">`
         :'';
       return `<div class="up-card">
         <div class="up-header">

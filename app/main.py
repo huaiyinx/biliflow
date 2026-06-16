@@ -6,11 +6,12 @@ import os
 import json
 import time
 import threading
+import requests
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -143,6 +144,38 @@ async def api_stats():
     }
 
 
+@app.get("/api/up/{up_id}/avatar")
+async def api_up_avatar(up_id: int):
+    """服务端代理头像，避免浏览器直连 hdslb 被 403。"""
+    with get_db() as db:
+        row = db.execute("SELECT avatar FROM up_masters WHERE id = ?", (up_id,)).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(404, "头像不存在")
+
+    avatar_url = row[0]
+    try:
+        r = requests.get(
+            avatar_url,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://space.bilibili.com/",
+            },
+            timeout=20,
+        )
+        if r.status_code != 200:
+            raise HTTPException(r.status_code, "头像拉取失败")
+        media_type = r.headers.get("content-type", "image/jpeg")
+        return Response(
+            content=r.content,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"头像代理失败: {e}")
+
+
 @app.get("/api/up")
 async def api_list_ups():
     """列出所有 UP主"""
@@ -179,14 +212,18 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
             "SELECT * FROM up_masters WHERE uid = ?", (uid,)
         ).fetchone()
         if existing:
-            # 已存在，扫描新视频
+            # 已存在，顺手刷新名称/头像，再扫描新视频
+            db.execute(
+                "UPDATE up_masters SET name = ?, avatar = COALESCE(NULLIF(?, ''), avatar) WHERE id = ?",
+                (name, avatar, existing["id"]),
+            )
             known = set(
                 r[0] for r in db.execute(
                     "SELECT bvid FROM videos WHERE up_id = ?", (existing["id"],)
                 ).fetchall()
             )
             from bili_api import get_new_videos
-            new_videos = get_new_videos(uid, known)
+            new_videos = get_new_videos(uid, known, up_name=name)
             if new_videos:
                 shell_notes = create_shell_notes_batch(
                     name, uid, existing["id"], new_videos
@@ -365,7 +402,7 @@ async def api_retry_failed(up_name: str):
             raise HTTPException(404, "UP主不存在")
 
         failed = db.execute(
-            "SELECT bvid, title, note_path FROM videos WHERE up_id = ? AND status = 'failed'",
+            "SELECT bvid, title, note_path FROM videos WHERE up_id = ? AND status IN ('fail', 'failed')",
             (up["id"],),
         ).fetchall()
 

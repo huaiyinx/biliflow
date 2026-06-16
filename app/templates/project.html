@@ -17,7 +17,7 @@
 {% endblock %}
 {% block content %}
 <div class="up-info">
-  {% if up.avatar %}<img src="{{ up.avatar }}" alt="{{ up.name }}">{% endif %}
+  {% if up.avatar %}<img src="/api/up/{{ up.id }}/avatar" alt="{{ up.name }}">{% endif %}
   <div>
     <h1>{{ up.name }}</h1>
     <div class="uid">UID: {{ up.uid }} · 订阅于 {{ up.created_at[:10] }}</div>
@@ -52,14 +52,14 @@
 <div class="video-item">
   <span style="font-size:1rem">
     {% if v.status == 'done' or v.status == 'ok' %}✅
-    {% elif v.status == 'failed' %}❌
+    {% elif v.status == 'fail' or v.status == 'failed' %}❌
     {% elif v.status == 'processing' %}🔄
     {% else %}⏳{% endif %}
   </span>
   <span class="v-title" title="{{ v.title }}">{{ v.title }}</span>
   <span class="v-meta">{{ v.duration }} · {{ v.play_count }}播放</span>
   <span class="tag
-    {% if v.status == 'done' or v.status == 'ok' %}tag-done{% elif v.status == 'failed' %}tag-fail{% elif v.status == 'processing' %}tag-processing{% else %}tag-pending{% endif %}
+    {% if v.status == 'done' or v.status == 'ok' %}tag-done{% elif v.status == 'fail' or v.status == 'failed' %}tag-fail{% elif v.status == 'processing' %}tag-processing{% else %}tag-pending{% endif %}
   ">{{ v.status or 'pending' }}</span>
   {% if v.source %}<span style="color:#6b7280;font-size:.68rem">{{ v.source }}</span>{% endif %}
 </div>

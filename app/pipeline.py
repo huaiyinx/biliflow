@@ -11,17 +11,17 @@ import requests
 import threading
 from pathlib import Path
 from config import config
-from bili_api import load_bili_cookie, fetch_subtitle, download_audio as bili_download_audio
+from bili_api import load_bili_cookie, fetch_subtitle, download_audio as bili_download_audio, download_audio_segments
 
 
 FULL_PROMPT = """# 角色与核心任务
-你是一位兼具"顶尖人际洞察专家"、"资深游戏制作人"与"AI 视频导演"多重身份的极客导师。
+你是一位兼具\"顶尖人际洞察专家\"、\"资深游戏制作人\"与\"AI 视频导演\"多重身份的极客导师。
 我将输入一段B站视频的语音转写文本（ASR，有口癖/错字）。
 无视原文流水账顺序，提取底层逻辑，重构为高密度 Obsidian 学习笔记。同时为核心场景设计 AI 视频生成分镜。
 
 # 硬性规则
-1. 修复ASR错字，删除"嗯 啊 对吧 对不对"等口癖和重复废话
-2. 按"问题→认知→方法→场景"重构，不跟时间线
+1. 修复ASR错字，删除\"嗯 啊 对吧 对不对\"等口癖和重复废话
+2. 按\"问题→认知→方法→场景\"重构，不跟时间线
 3. 必须映射到职场/社交/生活的具体场景
 4. 必须包含游戏开发(系统设计/Game Dev)的跨界映射脑洞
 5. 必须设计2-3个纯英文AI动画分镜提示词（适合直接喂给Sora/Runway/Kling）
@@ -51,7 +51,7 @@ FULL_PROMPT = """# 角色与核心任务
 - **Scene 2**: `[英文提示词]`
 
 ## 💬 金句摘录
-- "[提取原稿中最击中人心的话]"
+- \"[提取原稿中最击中人心的话]\"
 
 ---
 标题：{title}
@@ -119,8 +119,7 @@ def fetch_bili_subtitle(bvid: str) -> str | None:
 
 
 def download_audio(bvid: str, audio_dir: str) -> str | None:
-    """通过 bili CLI 下载音频"""
-    # 检查缓存
+    """优先通过 bili CLI 下载音频，失败时再兜底 yt-dlp。"""
     for ext in ["m4a", "mp3", "wav"]:
         for root, dirs, files in os.walk(audio_dir):
             for f in files:
@@ -133,8 +132,6 @@ def download_audio(bvid: str, audio_dir: str) -> str | None:
     if result:
         return result
 
-    # 降级: yt-dlp
-    import subprocess
     url = f"https://www.bilibili.com/video/{bvid}"
     tmpl = os.path.join(audio_dir, f"{bvid}.%(ext)s")
     try:
@@ -168,15 +165,18 @@ def parse_srt(srt_text: str) -> str | None:
 
 
 def sensevoice(audio_path: str) -> str | None:
-    """通过 SiliconFlow SenseVoice 转写"""
+    """通过 SiliconFlow SenseVoice 转写。"""
     size_mb = os.path.getsize(audio_path) / 1024 / 1024
     if size_mb > 25:
-        return None  # 文件太大
+        return None
 
-    ext = audio_path.split(".")[-1]
-    mime = {"m4a": "audio/mp4", "mp3": "audio/mpeg"}.get(ext, "audio/mpeg")
+    ext = audio_path.split(".")[-1].lower()
+    mime = {
+        "m4a": "audio/mp4",
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+    }.get(ext, "audio/mpeg")
 
-    # 先试获取结构化格式
     for fmt in ["srt", "verbose_json", "vtt"]:
         for _ in range(2):
             try:
@@ -204,7 +204,6 @@ def sensevoice(audio_path: str) -> str | None:
             except Exception:
                 time.sleep(2)
 
-    # 降级：纯文本
     for _ in range(2):
         try:
             with open(audio_path, "rb") as f:
@@ -221,6 +220,23 @@ def sensevoice(audio_path: str) -> str | None:
         except Exception:
             time.sleep(2)
     return None
+
+
+def sensevoice_segments(segment_paths: list[str]) -> str | None:
+    """将 bili CLI 切分后的 wav 片段逐段转写并拼接。"""
+    transcripts = []
+    for idx, seg in enumerate(segment_paths):
+        part = sensevoice(seg)
+        if not part or len(part.strip()) < 10:
+            continue
+        offset = idx * 25
+        prefix = f"[{fmt_ts(offset)}] "
+        cleaned = part.strip()
+        if cleaned.startswith('['):
+            transcripts.append(cleaned)
+        else:
+            transcripts.append(prefix + cleaned)
+    return "\n".join(transcripts) if transcripts else None
 
 
 def call_llm(prompt: str, max_tokens: int = 2500) -> str | None:
@@ -249,10 +265,7 @@ def call_llm(prompt: str, max_tokens: int = 2500) -> str | None:
     return None
 
 
-# ===== 笔记解析与写入 =====
-
 def parse_note_content(content: str) -> dict:
-    """解析现有笔记的 frontmatter + 标题 + 原始转录"""
     result = {
         "title": "", "bvid": "", "raw_transcript": "",
         "frontmatter": "", "header_lines": [],
@@ -293,7 +306,6 @@ def parse_note_content(content: str) -> dict:
 
 
 def update_note_frontmatter(note_path: str, updates: dict):
-    """在已有笔记的 frontmatter 中更新/添加字段"""
     try:
         with open(note_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -333,7 +345,6 @@ def update_note_frontmatter(note_path: str, updates: dict):
 
 
 def has_timestamp(text: str) -> bool:
-    """检查文本是否包含时间戳标记"""
     return bool(re.search(r"\[\d{2}:\d{2}", text))
 
 
@@ -341,13 +352,6 @@ def process_one_video(
     bvid: str, title: str, note_path: str,
     audio_dir: str, progress: ProgressTracker,
 ) -> tuple[str, str]:
-    """
-    处理单个视频
-    Returns: (status, source)
-      status: ok | fail | skip
-      source: CLI | SV | raw | cached
-    """
-    # 0. 查重：如果笔记已有完整8模块，跳过
     if os.path.exists(note_path):
         existing = open(note_path, encoding="utf-8").read()
         required_sections = [
@@ -357,7 +361,6 @@ def process_one_video(
         if all(s in existing for s in required_sections):
             return "ok", "cached"
 
-    # 1. 读取现有笔记，获取已有转录
     transcript = ""
     source = "raw"
     need_fetch = True
@@ -369,7 +372,6 @@ def process_one_video(
             need_fetch = False
             source = "raw"
 
-    # 2. 尝试获取字幕
     if need_fetch and bvid:
         new_t = fetch_bili_subtitle(bvid)
         if new_t:
@@ -377,11 +379,26 @@ def process_one_video(
             source = "CLI"
             need_fetch = False
 
-    # 3. 降级: 音频 + SenseVoice
     if need_fetch or not transcript or len(transcript) < 30:
         audio_path = download_audio(bvid, audio_dir)
+        new_t = None
         if audio_path:
-            new_t = sensevoice(audio_path)
+            if os.path.getsize(audio_path) / 1024 / 1024 > 25:
+                segment_dir = os.path.join(audio_dir, f"{bvid}_segments")
+                segments = download_audio_segments(bvid, segment_dir)
+                if segments:
+                    new_t = sensevoice_segments(segments)
+                    for seg in segments:
+                        try:
+                            os.remove(seg)
+                        except Exception:
+                            pass
+                    try:
+                        os.rmdir(segment_dir)
+                    except Exception:
+                        pass
+            else:
+                new_t = sensevoice(audio_path)
             try:
                 os.remove(audio_path)
             except Exception:
@@ -391,20 +408,19 @@ def process_one_video(
                 source = "SV"
                 progress.update({"sv_fallback": progress.data["sv_fallback"] + 1})
             else:
-                return "fail", "no_audio"
+                progress.update({"no_text": progress.data["no_text"] + 1})
+                return "fail", "no_text"
         elif not transcript or len(transcript) < 30:
             return "fail", "no_dl"
 
     if not transcript or len(transcript) < 30:
         return "fail", "short"
 
-    # 4. LLM 重构
     prompt = FULL_PROMPT.format(title=title, transcript=transcript[:4000])
     result = call_llm(prompt, 2500)
     if not result:
         return "fail", "llm"
 
-    # 5. 生成笔记
     clean = result.strip()
     if clean.startswith("---"):
         parts = clean.split("---", 2)
@@ -413,7 +429,6 @@ def process_one_video(
     if clean.startswith("# "):
         clean = "\n".join(clean.split("\n")[1:]).strip()
 
-    # 写入笔记（保留原始转录）
     if os.path.exists(note_path):
         parsed = parse_note_content(open(note_path, encoding="utf-8").read())
     else:
@@ -465,10 +480,6 @@ def process_one_video(
 
 def process_up_videos(up_name: str, video_list: list[dict], vault_dir: str,
                       project_dir: str, progress_callback=None):
-    """
-    处理一个 UP主的所有待处理视频
-    video_list: [{bvid, title, note_path}, ...]
-    """
     audio_dir = os.path.join(project_dir, "audio")
     os.makedirs(audio_dir, exist_ok=True)
 
@@ -490,21 +501,19 @@ def process_up_videos(up_name: str, video_list: list[dict], vault_dir: str,
         if status == "ok":
             ok += 1
         elif status == "skip":
-            ok += 1  # 已有完整笔记算成功
+            ok += 1
         else:
             fail += 1
         if source == "SV":
             sv += 1
 
-        # 更新数据库
         try:
             from db import get_db
             with get_db() as db:
                 db.execute(
-                    "UPDATE videos SET status=?, source=?, processed_at=datetime('now','localtime') WHERE bvid=?",
-                    (status, source, v["bvid"]),
+                    "UPDATE videos SET status=?, source=?, error_msg=?, processed_at=datetime('now','localtime') WHERE bvid=?",
+                    (status, source, None if status in ("ok", "done", "skip") else source, v["bvid"]),
                 )
-                # 同时更新 up_masters 计数，让首页实时刷新
                 db.execute(
                     "UPDATE up_masters SET processed_videos=?, failed_videos=? WHERE name=?",
                     (ok, fail, up_name),

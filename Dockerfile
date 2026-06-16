@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# yt-dlp (单独安装，更新频繁)
-RUN pip3 install --no-cache-dir yt-dlp
+# bili-cli 热修补: 某些 DASH 视频的 detect_best_streams 会在 audio 下载前崩溃
+COPY patch_bili_cli.py .
+RUN python patch_bili_cli.py
 
 # 工作目录
 WORKDIR /app
