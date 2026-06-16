@@ -15,11 +15,11 @@
 {% block content %}
 <div class="card form-card">
 <h1>➕ 添加 UP主</h1>
-<p class="hint">粘贴 B站 UP主空间链接，自动获取全部视频并生成笔记</p>
+<p class="hint">输入 B站 UP主空间链接或直接输入UP主名称，自动获取全部视频并生成笔记</p>
 <form id="addForm" onsubmit="submitAdd(event)">
   <div class="form-group">
-    <label>B站 UP主 空间链接</label>
-    <input type="url" id="urlInput" placeholder="https://space.bilibili.com/123456/video" required autofocus>
+    <label>B站 UP主 空间链接 或 UP主名字</label>
+    <input type="text" id="urlInput" placeholder="输入空间链接，或直接输入UP主名字（如：贾行家）" required autofocus>
   </div>
   <button type="submit" class="btn btn-primary" style="width:100%;padding:12px" id="submitBtn">🔍 解析并添加</button>
 </form>

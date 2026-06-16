@@ -414,3 +414,27 @@ def get_my_info() -> Optional[dict]:
     except Exception:
         pass
     return None
+
+
+def search_up_uid_by_name(name: str) -> Optional[str]:
+    """通过名字搜索 UP主，返回精确匹配的 UID 或最匹配的第一个 UID"""
+    try:
+        clean_name = name.strip()
+        data = _run_bili(["search", "--type", "user", clean_name, "--json"])
+        if isinstance(data, dict) and data.get("ok"):
+            items = data.get("data", [])
+            if not items:
+                return None
+            
+            # 1. 优先精确匹配
+            for item in items:
+                item_name = (item.get("name") or "").strip()
+                if item_name.lower() == clean_name.lower():
+                    return str(item.get("id"))
+            
+            # 2. 如果没有精确匹配，返回第一个结果的 id
+            return str(items[0].get("id"))
+    except Exception:
+        pass
+    return None
+

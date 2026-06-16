@@ -189,11 +189,21 @@ async def api_list_ups():
 @app.post("/api/up")
 async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = None):
     """添加 UP主"""
-    uid = extract_uid_from_url(url)
-    if not uid:
-        raise HTTPException(400, "无法解析 UID，请检查链接")
+    input_str = url.strip()
+    uid = None
+    
+    if "bilibili.com" in input_str or input_str.startswith("http"):
+        uid = extract_uid_from_url(input_str)
+        if not uid:
+            raise HTTPException(400, "无法解析链接中的 UID，请检查链接")
+    else:
+        from bili_api import search_up_uid_by_name
+        uid = search_up_uid_by_name(input_str)
+        if not uid:
+            raise HTTPException(400, f"未找到名为 '{input_str}' 的 UP主")
 
     # 获取 UP主 信息
+
     info = get_up_info(uid)
     if not info:
         cookie_ok = bool(load_bili_cookie())
