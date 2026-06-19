@@ -7,6 +7,8 @@ services:
     volumes:
       # Obsidian vault (笔记输出)
       - /data/obsidian-vault:/data/obsidian-vault:rw
+      # agent-ops 队列（镜像投递到本机 Obsidian）
+      - /data/obsidian-agent-ops:/data/obsidian-agent-ops:rw
       # SQLite + 持久化数据
       - ./data:/app/data
       # 临时工作目录

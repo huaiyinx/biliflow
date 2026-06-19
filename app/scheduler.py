@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from config import config
+from obsidian_sync import ensure_vault_dirs, write_vault_file
 
 logger = logging.getLogger("bili-flow.scheduler")
 
@@ -43,6 +44,12 @@ def check_and_process(up_name: str = None):
     """
     from db import get_db
     from bili_api import get_new_videos, get_up_info
+
+    try:
+        ensure_vault_dirs()
+    except Exception as e:
+        logger.error(f"初始化 Vault 目录失败: {e}")
+        return
 
     with get_db() as db:
         if up_name:
@@ -167,8 +174,7 @@ def _rewrite_note_navigation(note_path: str, newer: dict | None, older: dict | N
         new_block = cleaned_block
 
     rebuilt = prefix + new_block + suffix
-    with open(note_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(rebuilt) + "\n")
+    write_vault_file(note_path, "\n".join(rebuilt) + "\n", created_by="bili-flow-nav")
 
 
 def refresh_note_navigation(up_name: str, up_id: int, up_dir: str):
@@ -210,9 +216,7 @@ def create_shell_notes_batch(up_name: str, uid: str, up_id: int,
     from db import get_db
     from bili_api import enrich_video_meta
 
-    vault_biki = os.path.join(config.VAULT_ROOT, config.VAULT_BIKI_DIR)
-    up_dir = os.path.join(vault_biki, up_name)
-    os.makedirs(up_dir, exist_ok=True)
+    up_dir = ensure_vault_dirs(up_name)
 
     shell_notes = []
 
@@ -246,8 +250,7 @@ created: {datetime.now().strftime("%Y-%m-%d")}
             with open(filepath, encoding="utf-8") as f:
                 if '## ⏱️ 30秒速通' in f.read(2000):
                     continue
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(note)
+        write_vault_file(filepath, note, created_by="bili-flow-shell")
 
         with get_db() as db:
             existing = db.execute(
@@ -291,6 +294,7 @@ created: {datetime.now().strftime("%Y-%m-%d")}
 
 def update_moc(up_name: str, up_dir: str):
     """更新 MOC 索引页"""
+    os.makedirs(up_dir, exist_ok=True)
     moc_path = os.path.join(up_dir, f"{up_name}_MOC.md")
 
     done_count = 0
@@ -338,8 +342,7 @@ created: {datetime.now().strftime("%Y-%m-%d")}
 ## ⏳ 待处理 ({pending_count})
 {chr(10).join(pending_links) if pending_links else '> 暂无'}
 """
-    with open(moc_path, "w", encoding="utf-8") as f:
-        f.write(moc)
+    write_vault_file(moc_path, moc, created_by="bili-flow-moc")
 
 
 def run_pipeline_for_up(up_name: str, up_id: int, video_list: list[dict]):
@@ -357,7 +360,7 @@ def run_pipeline_for_up(up_name: str, up_id: int, video_list: list[dict]):
             )
 
         project_dir = os.path.join(config.PROJECTS_DIR, up_name)
-        vault_dir = os.path.join(config.VAULT_ROOT, config.VAULT_BIKI_DIR, up_name)
+        vault_dir = ensure_vault_dirs(up_name)
 
         process_up_videos(up_name, video_list, vault_dir, project_dir)
 

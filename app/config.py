@@ -25,6 +25,10 @@ class Config:
     # Vault
     VAULT_ROOT: str = os.getenv("VAULT_ROOT", "/data/obsidian-vault")
     VAULT_BIKI_DIR: str = os.getenv("VAULT_BIKI_DIR", "10-B站笔记")
+    OBSIDIAN_AGENT_OPS_DIR: str = os.getenv("OBSIDIAN_AGENT_OPS_DIR", "/data/obsidian-agent-ops")
+    ENABLE_AGENT_OPS_MIRROR: bool = os.getenv("ENABLE_AGENT_OPS_MIRROR", "1").lower() not in {
+        "0", "false", "no", "off"
+    }
 
     # Scheduler
     CHECK_INTERVAL_HOURS: int = int(os.getenv("CHECK_INTERVAL_HOURS", "6"))

@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from config import config
 from bili_api import load_bili_cookie, fetch_subtitle, download_audio as bili_download_audio, download_audio_segments
+from obsidian_sync import write_vault_file
 
 
 FULL_PROMPT = """# 角色与核心任务
@@ -337,8 +338,7 @@ def update_note_frontmatter(note_path: str, updates: dict):
             else:
                 fm += f"\n{key}: {v_str}"
 
-        with open(note_path, "w", encoding="utf-8") as f:
-            f.write(f"---\n{fm}\n---{body}")
+        write_vault_file(note_path, f"---\n{fm}\n---{body}", created_by="bili-flow-frontmatter")
 
     except Exception:
         pass
@@ -471,9 +471,7 @@ def process_one_video(
     body_parts.append("")
     body_parts.append(transcript.strip())
 
-    os.makedirs(os.path.dirname(note_path), exist_ok=True)
-    with open(note_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(body_parts))
+    write_vault_file(note_path, "\n".join(body_parts), created_by="bili-flow-pipeline")
 
     return "ok", source
 
