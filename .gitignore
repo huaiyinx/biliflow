@@ -2,8 +2,8 @@
 .env
 bili-cred/
 
-# SQLite 数据库
-data/*.db
+# SQLite 数据库与运行日志
+data/
 
 # 临时文件
 projects/
