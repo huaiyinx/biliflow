@@ -54,6 +54,9 @@ def find_targets(limit: int | None = None, up_name: str | None = None) -> list[d
     query = """
         SELECT
             v.id, v.bvid, v.title, v.note_path, v.up_id,
+            v.status AS old_status,
+            v.source AS old_source,
+            v.error_msg AS old_error_msg,
             u.name AS up_name
         FROM videos v
         JOIN up_masters u ON u.id = v.up_id
@@ -122,18 +125,21 @@ def main():
             if status in ("ok", "done", "skip"):
                 ok += 1
                 error_msg = None
+                with get_db() as db:
+                    db.execute(
+                        """
+                        UPDATE videos
+                        SET status = ?, source = ?, error_msg = ?, processed_at = datetime('now','localtime')
+                        WHERE id = ?
+                        """,
+                        (status, source, error_msg, row["id"]),
+                    )
             else:
                 fail += 1
-                error_msg = source
-
-            with get_db() as db:
-                db.execute(
-                    """
-                    UPDATE videos
-                    SET status = ?, source = ?, error_msg = ?, processed_at = datetime('now','localtime')
-                    WHERE id = ?
-                    """,
-                    (status, source, error_msg, row["id"]),
+                print(
+                    f"preserve old status after upgrade failure: {row['bvid']} "
+                    f"old={row['old_status']} new={status}/{source}",
+                    flush=True,
                 )
             refresh_up_counts(row["up_id"])
             progress.update({

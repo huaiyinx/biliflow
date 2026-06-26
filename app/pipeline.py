@@ -387,10 +387,33 @@ def has_timestamp(text: str) -> bool:
     return bool(re.search(r"\[\d{2}:\d{2}", text))
 
 
+def existing_note_context(note_path: str) -> str | None:
+    """Use the previous generated note as a safe fallback for template upgrades."""
+    if not os.path.exists(note_path):
+        return None
+    try:
+        content = open(note_path, encoding="utf-8").read()
+    except Exception:
+        return None
+    if "30秒速通" not in content or len(content) < 500:
+        return None
+    if content.startswith("---"):
+        fm_end = content.find("---", 4)
+        if fm_end != -1:
+            content = content[fm_end + 3:]
+    for marker in ["## 📜 原始讲稿备份", "## 📝 原始转录", "## 📜 原始讲稿"]:
+        if marker in content:
+            content = content.split(marker, 1)[0]
+            break
+    content = re.sub(r"\n{3,}", "\n\n", content).strip()
+    return content if len(content) > 300 else None
+
+
 def process_one_video(
     bvid: str, title: str, note_path: str,
     audio_dir: str, progress: ProgressTracker,
 ) -> tuple[str, str]:
+    note_context = existing_note_context(note_path)
     if os.path.exists(note_path):
         existing = open(note_path, encoding="utf-8").read()
         required_sections = [
@@ -450,12 +473,24 @@ def process_one_video(
                 progress.update({"sv_fallback": progress.data["sv_fallback"] + 1})
             else:
                 progress.update({"no_text": progress.data["no_text"] + 1})
-                return "fail", "no_text"
+                if note_context:
+                    transcript = note_context
+                    source = "NOTE"
+                else:
+                    return "fail", "no_text"
         elif not transcript or len(transcript) < 30:
-            return "fail", "no_dl"
+            if note_context:
+                transcript = note_context
+                source = "NOTE"
+            else:
+                return "fail", "no_dl"
 
     if not transcript or len(transcript) < 30:
-        return "fail", "short"
+        if note_context:
+            transcript = note_context
+            source = "NOTE"
+        else:
+            return "fail", "short"
 
     prompt = FULL_PROMPT.format(title=title, transcript=transcript[:8000])
     result = call_llm(prompt, 3600)
@@ -477,23 +512,52 @@ def process_one_video(
                   "frontmatter": "---\ntype: bilibili\n---\n",
                   "header_lines": []}
 
-    fm_lines = parsed["frontmatter"].split("\n")
-    new_fm = []
-    has_title = False
-    for line in fm_lines:
-        if line.startswith("title:"):
-            new_fm.append(f'title: "{title}"')
-            has_title = True
-        elif line.startswith("status:"):
-            new_fm.append('status: "done"')
-        elif line.startswith("processed:"):
-            new_fm.append(f'processed: "{time.strftime("%Y-%m-%d")}"')
-        elif line.startswith("source:"):
-            new_fm.append(f'source: "{source}"')
-        else:
-            new_fm.append(line)
-    if not has_title and new_fm:
-        new_fm.insert(1, f'title: "{title}"')
+    if not parsed.get("frontmatter", "").startswith("---"):
+        new_fm = [
+            "---",
+            f'title: "{title}"',
+            "type: bilibili",
+            'status: "done"',
+            f'processed: "{time.strftime("%Y-%m-%d")}"',
+            f'source: "{source}"',
+            "---",
+        ]
+    else:
+        fm_lines = parsed["frontmatter"].split("\n")
+        new_fm = []
+        has_title = False
+        has_status = False
+        has_processed = False
+        has_source = False
+        for line in fm_lines:
+            if line.startswith("title:"):
+                new_fm.append(f'title: "{title}"')
+                has_title = True
+            elif line.startswith("status:"):
+                new_fm.append('status: "done"')
+                has_status = True
+            elif line.startswith("processed:"):
+                new_fm.append(f'processed: "{time.strftime("%Y-%m-%d")}"')
+                has_processed = True
+            elif line.startswith("source:"):
+                new_fm.append(f'source: "{source}"')
+                has_source = True
+            elif line == "---" and len(new_fm) > 0:
+                if not has_title:
+                    new_fm.append(f'title: "{title}"')
+                    has_title = True
+                if not has_status:
+                    new_fm.append('status: "done"')
+                    has_status = True
+                if not has_processed:
+                    new_fm.append(f'processed: "{time.strftime("%Y-%m-%d")}"')
+                    has_processed = True
+                if not has_source:
+                    new_fm.append(f'source: "{source}"')
+                    has_source = True
+                new_fm.append(line)
+            else:
+                new_fm.append(line)
 
     body_parts = [
         "\n".join(new_fm),
@@ -508,7 +572,10 @@ def process_one_video(
     body_parts.append("")
     body_parts.append("---")
     body_parts.append("")
-    body_parts.append("## 📜 原始讲稿备份（含完整时间戳）")
+    if source == "NOTE":
+        body_parts.append("## 🗂️ 旧笔记正文备份（用于增量升级）")
+    else:
+        body_parts.append("## 📜 原始讲稿备份（含完整时间戳）")
     body_parts.append("")
     body_parts.append(transcript.strip())
 
