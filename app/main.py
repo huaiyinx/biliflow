@@ -232,11 +232,19 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
                 up_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
             existing_video = db.execute(
-                "SELECT id, status FROM videos WHERE up_id = ? AND bvid = ?",
+                "SELECT id, status, title, note_path, note_file FROM videos WHERE up_id = ? AND bvid = ?",
                 (up_id, bvid),
             ).fetchone()
 
-        shell_notes = create_shell_notes_batch(name, uid, up_id, [video])
+        if existing_video and existing_video["note_path"]:
+            shell_notes = [{
+                "bvid": bvid,
+                "title": existing_video["title"] or video["title"],
+                "note_path": existing_video["note_path"],
+                "note_file": existing_video["note_file"],
+            }]
+        else:
+            shell_notes = create_shell_notes_batch(name, uid, up_id, [video])
         if shell_notes and not is_processing(name):
             t = threading.Thread(
                 target=run_pipeline_for_up,
