@@ -17,7 +17,15 @@ from fastapi.templating import Jinja2Templates
 
 from config import config
 from db import get_db, init_db
-from bili_api import get_up_info, get_all_videos, extract_uid_from_url, load_bili_cookie, get_my_info
+from bili_api import (
+    extract_bvid_from_url,
+    extract_uid_from_url,
+    get_all_videos,
+    get_my_info,
+    get_up_info,
+    get_video_info,
+    load_bili_cookie,
+)
 from scheduler import (
     start_scheduler, check_and_process, is_processing,
     create_shell_notes_batch, run_pipeline_for_up, update_moc,
@@ -191,11 +199,65 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
     """添加 UP主"""
     input_str = url.strip()
     uid = None
+
+    bvid = extract_bvid_from_url(input_str)
+    if bvid:
+        video = get_video_info(bvid)
+        if not video:
+            raise HTTPException(400, f"无法获取视频信息: {bvid}")
+
+        uid = video.get("owner_uid", "")
+        if not uid:
+            raise HTTPException(400, f"视频 {bvid} 缺少 UP 主信息，暂无法入库")
+
+        info = get_up_info(uid) or {}
+        name = info.get("name") or video.get("owner_name") or uid
+        avatar = info.get("avatar", "")
+
+        with get_db() as db:
+            existing = db.execute(
+                "SELECT * FROM up_masters WHERE uid = ?", (uid,)
+            ).fetchone()
+            if existing:
+                up_id = existing["id"]
+                db.execute(
+                    "UPDATE up_masters SET name = ?, avatar = COALESCE(NULLIF(?, ''), avatar) WHERE id = ?",
+                    (name, avatar, up_id),
+                )
+            else:
+                db.execute(
+                    "INSERT INTO up_masters (uid, name, avatar, status) VALUES (?,?,?,'idle')",
+                    (uid, name, avatar),
+                )
+                up_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            existing_video = db.execute(
+                "SELECT id, status FROM videos WHERE up_id = ? AND bvid = ?",
+                (up_id, bvid),
+            ).fetchone()
+
+        shell_notes = create_shell_notes_batch(name, uid, up_id, [video])
+        if shell_notes and not is_processing(name):
+            t = threading.Thread(
+                target=run_pipeline_for_up,
+                args=(name, up_id, shell_notes),
+                daemon=True,
+            )
+            t.start()
+
+        return {
+            "status": "video_updated" if existing_video else "video_created",
+            "up_name": name,
+            "bvid": bvid,
+            "new_videos": 0 if existing_video else 1,
+            "url": f"https://{config.DOMAIN}/up/{name}",
+            "message": "已识别为单个视频链接，并加入 BiliFlow 处理。",
+        }
     
     if "bilibili.com" in input_str or input_str.startswith("http"):
         uid = extract_uid_from_url(input_str)
         if not uid:
-            raise HTTPException(400, "无法解析链接中的 UID，请检查链接")
+            raise HTTPException(400, "无法解析链接中的 UID 或 BV号，请检查链接")
     else:
         from bili_api import search_up_uid_by_name
         uid = search_up_uid_by_name(input_str)

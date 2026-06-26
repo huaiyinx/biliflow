@@ -398,6 +398,12 @@ def get_new_videos(uid: str, known_bvids: set[str], up_name: str | None = None) 
     return [v for v in all_videos if v["bvid"] not in known_bvids]
 
 
+def extract_bvid_from_url(text: str) -> Optional[str]:
+    """从 BV 号、B站视频 URL 或混杂文本中提取 BVID。"""
+    m = re.search(r"(BV[a-zA-Z0-9]{10})", text or "")
+    return m.group(1) if m else None
+
+
 def extract_uid_from_url(url: str) -> Optional[str]:
     for p in [r"space\.bilibili\.com/(\d+)", r"bilibili\.com/(\d+)"]:
         m = re.search(p, url)
