@@ -2,6 +2,7 @@
 定时任务调度器: 自动检查 UP主更新
 """
 import os
+import re
 import threading
 import time
 import logging
@@ -86,6 +87,10 @@ def check_and_process(up_name: str = None):
                 )
 
             new_videos = get_new_videos(uid, known, up_name=name)
+            try:
+                backfill_missing_video_meta(up_id, limit=12)
+            except Exception as e:
+                logger.warning(f"[{name}] 时长回填跳过: {e}")
 
             if new_videos:
                 logger.info(f"[{name}] 发现 {len(new_videos)} 个新视频")
@@ -110,6 +115,95 @@ def check_and_process(up_name: str = None):
 
         except Exception as e:
             logger.error(f"[{name}] 检查更新失败: {e}")
+
+
+def _duration_is_bad(duration: str | None) -> bool:
+    return str(duration or "").strip() in ("", "?", "00:00")
+
+
+def _rewrite_note_meta(note_path: str, duration: str, play_count: int | None):
+    """同步修正历史笔记中的 duration/play_count 与顶部展示行。"""
+    if not note_path or not os.path.exists(note_path):
+        return
+
+    try:
+        content = open(note_path, encoding="utf-8").read()
+    except Exception:
+        return
+
+    updated = content
+    updated = re.sub(
+        r'^duration:\s*"?[^"\n]*"?\s*$',
+        f'duration: "{duration}"',
+        updated,
+        flags=re.MULTILINE,
+    )
+    if play_count is not None:
+        updated = re.sub(
+            r"^play_count:\s*\d+\s*$",
+            f"play_count: {int(play_count)}",
+            updated,
+            flags=re.MULTILINE,
+        )
+    updated = re.sub(
+        r"(\*\*时长\*\*:\s*)([^|>\n]+)",
+        rf"\g<1>{duration} ",
+        updated,
+        count=1,
+    )
+    if play_count is not None:
+        updated = re.sub(
+            r"(\*\*播放\*\*:\s*)([\d,]+)",
+            rf"\g<1>{int(play_count)}",
+            updated,
+            count=1,
+        )
+
+    if updated != content:
+        write_vault_file(note_path, updated, created_by="bili-flow-meta-backfill")
+
+
+def backfill_missing_video_meta(up_id: int, limit: int = 20) -> int:
+    """用单视频详情慢速回填历史 00:00/? 时长，避免每次页面都看到错误数据。"""
+    from db import get_db
+    from bili_api import get_video_info
+
+    with get_db() as db:
+        rows = db.execute(
+            """
+            SELECT id, bvid, duration, play_count, note_path
+            FROM videos
+            WHERE up_id = ?
+              AND (duration IS NULL OR duration IN ('', '?', '00:00') OR play_count IS NULL OR play_count <= 0)
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (up_id, limit),
+        ).fetchall()
+
+    changed = 0
+    for row in rows:
+        detail = get_video_info(row["bvid"])
+        if not detail:
+            time.sleep(1.5)
+            continue
+
+        duration = detail.get("duration") or row["duration"] or "?"
+        play_count = detail.get("play_count") or row["play_count"] or 0
+        if _duration_is_bad(duration) and int(play_count or 0) <= 0:
+            time.sleep(1.5)
+            continue
+
+        with get_db() as db:
+            db.execute(
+                "UPDATE videos SET duration = ?, play_count = ? WHERE id = ?",
+                (duration, int(play_count or 0), row["id"]),
+            )
+        _rewrite_note_meta(row["note_path"], duration, int(play_count or 0))
+        changed += 1
+        time.sleep(2.0)
+
+    return changed
 
 
 def _rewrite_note_navigation(note_path: str, newer: dict | None, older: dict | None):

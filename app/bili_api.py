@@ -58,6 +58,13 @@ def _looks_like_risk_control(text: str) -> bool:
     return any(marker in text for marker in markers)
 
 
+def _looks_like_truncated_batch(count: int, page_size: int, max_items: int) -> bool:
+    """B站风控时常返回整页数结果，例如 50/100/150，但并非真实全量。"""
+    if count <= 0 or count >= max_items:
+        return False
+    return count % page_size == 0
+
+
 def _normalize_videos(vlist: list[dict]) -> list[dict]:
     videos = []
     seen: set[str] = set()
@@ -188,7 +195,7 @@ def get_all_videos(uid: str, page_size: int = 50, up_name: str | None = None) ->
     max_items = min(page_size * 20, 1000)
     args = ["user-videos", uid, "-n", str(max_items), "--json"]
     best_videos: list[dict] = []
-    cooldowns = [0, 5, 20]
+    cooldowns = [0, 8, 30, 90]
 
     for attempt, cooldown in enumerate(cooldowns):
         if cooldown:
@@ -217,7 +224,10 @@ def get_all_videos(uid: str, page_size: int = 50, up_name: str | None = None) ->
                     return videos
                 if videos and len(videos) >= max_items:
                     return videos
-                if videos and not risk_hit:
+                possibly_truncated = _looks_like_truncated_batch(
+                    len(videos), page_size, max_items
+                )
+                if videos and not risk_hit and not possibly_truncated:
                     return videos
                 if videos and attempt < len(cooldowns) - 1:
                     continue
@@ -225,7 +235,11 @@ def get_all_videos(uid: str, page_size: int = 50, up_name: str | None = None) ->
                 if not _looks_like_risk_control(combined):
                     time.sleep(1.5)
 
-        if raw and not _looks_like_risk_control(combined):
+        if (
+            raw
+            and not _looks_like_risk_control(combined)
+            and not _looks_like_truncated_batch(len(best_videos), page_size, max_items)
+        ):
             break
 
     if best_videos:
@@ -472,4 +486,3 @@ def search_up_uid_by_name(name: str) -> Optional[str]:
     except Exception:
         pass
     return None
-
