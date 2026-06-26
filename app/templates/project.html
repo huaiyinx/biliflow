@@ -2,73 +2,205 @@
 {% block title %}{{ up.name }} · 详情{% endblock %}
 {% block extra_head %}
 <style>
-.up-info{display:flex;align-items:center;gap:16px;margin-bottom:24px}
-.up-info img{width:60px;height:60px;border-radius:50%}
-.up-info h1{margin:0;font-size:1.3rem}
-.up-info .uid{font-size:.8rem;color:#6b7280}
-.action-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
-.video-list{max-height:70vh;overflow-y:auto}
-.video-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #2d2d4a;font-size:.83rem;transition:background .15s}
-.video-item:hover{background:#1a1a2e}
-.video-item .v-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d1d5db}
-.video-item .v-meta{font-size:.72rem;color:#6b7280;white-space:nowrap}
-.empty-section{text-align:center;padding:30px;color:#6b7280}
+.project-layout{
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.up-info{display:flex;align-items:center;gap:20px;margin-bottom:24px}
+.up-info img{
+  width:68px;
+  height:68px;
+  border-radius:50%;
+  border: none;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4), 0 0 15px rgba(192, 132, 252, 0.25);
+}
+.up-info h1{margin:0;font-size:1.5rem;font-weight:800;color:#f8fafc}
+.up-info .uid{font-size:.82rem;color:#94a3b8;margin-top:6px;font-weight:600;letter-spacing:0.5px}
+
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{
+  background:rgba(255, 255, 255, 0.012);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border: none;
+  border-radius:20px;
+  padding:18px 10px;
+  text-align:center;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px -10px rgba(192, 132, 252, 0.18);
+  background:rgba(255, 255, 255, 0.02);
+}
+.stat-card .num{font-size:2rem;font-weight:800;letter-spacing:-1.2px}
+.stat-card .label{font-size:.75rem;color:#94a3b8;margin-top:6px;font-weight:600;letter-spacing:0.5px}
+
+.action-bar{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.video-list-container{
+  padding: 10px 0;
+}
+.video-list{
+  max-height: 80vh;
+  overflow-y:auto;
+  padding-right:12px;
+}
+/* 优化滚动条 */
+.video-list::-webkit-scrollbar {
+  width: 6px;
+}
+.video-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: 3px;
+}
+.video-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+.video-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.3);
+}
+
+.video-item{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:16px 14px;
+  font-size:.88rem;
+  transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  background: transparent;
+  position: relative;
+  border-radius: 12px;
+}
+.video-item::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #8b5cf6 35%, #db2777 65%, transparent 100%);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.video-item:hover{
+  background: rgba(255, 255, 255, 0.015);
+  transform: translateX(8px);
+  box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.15);
+}
+.video-item:hover::after {
+  transform: scaleX(1);
+}
+.video-item .v-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:600}
+.video-item .v-meta{font-size:.78rem;color:#94a3b8;white-space:nowrap;font-weight:500}
+.empty-section{text-align:center;padding:48px 20px;color:#64748b;font-weight:600}
+
+@media(min-width: 1024px){
+  .project-layout{
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 36px;
+    align-items: start;
+  }
+  .sidebar-col{
+    position: sticky;
+    top: 100px;
+  }
+  .project-layout .stats-grid{
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .project-layout .action-bar{
+    flex-direction: column;
+  }
+  .project-layout .action-bar .btn{
+    width: 100%;
+    text-align: center;
+  }
+}
+@media(max-width:640px){
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+}
 </style>
 {% endblock %}
 {% block content %}
-<div class="up-info">
-  {% if up.avatar %}<img src="/api/up/{{ up.id }}/avatar" alt="{{ up.name }}">{% endif %}
-  <div>
-    <h1>{{ up.name }}</h1>
-    <div class="uid">UID: {{ up.uid }} · 订阅于 {{ up.created_at[:10] }}</div>
+<div class="project-layout">
+  <div class="sidebar-col">
+    <div class="up-info">
+      {% if up.avatar %}<img src="/api/up/{{ up.id }}/avatar" alt="{{ up.name }}">{% endif %}
+      <div>
+        <h1>{{ up.name }}</h1>
+        <div class="uid">UID: {{ up.uid }}</div>
+      </div>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card"><div class="num" style="color:#c084fc">{{ up.total_videos }}</div><div class="label">📹 总视频</div></div>
+      <div class="stat-card"><div class="num" style="color:#34d399">{{ up.processed_videos }}</div><div class="label">✅ 已完成</div></div>
+      <div class="stat-card"><div class="num" style="color:#fbbf24">{{ up.total_videos - up.processed_videos - up.failed_videos }}</div><div class="label">⏳ 待处理</div></div>
+      <div class="stat-card"><div class="num" style="color:#f87171">{{ up.failed_videos }}</div><div class="label">❌ 失败</div></div>
+    </div>
+    
+    <div class="action-bar">
+      <a href="/up/{{ up.name }}/dashboard" class="btn btn-primary">📊 实时看板</a>
+      {% if up.status != 'processing' and up.status != 'scanning' %}
+      <button class="btn btn-primary" onclick="triggerProcess('{{ up.name }}')">▶️ 开始处理</button>
+      <button class="btn btn-secondary" onclick="triggerScan('{{ up.name }}')">🔍 扫描新视频</button>
+      {% else %}
+      <button class="btn btn-primary" disabled style="opacity: 0.55; cursor: not-allowed">
+        {% if up.status == 'scanning' %}⏳ 正在扫描视频...{% else %}🔄 正在流水线处理...{% endif %}
+      </button>
+      {% endif %}
+      {% if up.failed_videos > 0 and up.status != 'scanning' and up.status != 'processing' %}
+      <button class="btn btn-secondary" onclick="retryFailed('{{ up.name }}')">🔄 重试失败</button>
+      {% endif %}
+      <button class="btn btn-danger" onclick="deleteUp('{{ up.name }}')">🗑️ 删除</button>
+    </div>
+    
+    <p id="statusBar" style="font-size:.85rem;color:#94a3b8;margin-bottom:16px;min-height:22px;font-weight:600;letter-spacing:0.5px"></p>
+  </div>
+
+  <div class="main-col">
+    <div class="video-list-container">
+      <h3 style="font-size:1.1rem;color:#f8fafc;margin-bottom:24px;font-weight:800;letter-spacing:0.5px;display:flex;align-items:center;gap:10px">
+        📹 视频列表 
+        <span style="font-size:.8rem;background:rgba(255,255,255,0.05);color:#a78bfa;padding:2px 8px;border-radius:10px">{{ videos|length }}</span>
+      </h3>
+      <div class="video-list">
+      {% for v in videos %}
+      <div class="video-item">
+        <span style="font-size:1.1rem;margin-right:4px">
+          {% if v.status == 'done' or v.status == 'ok' %}✅
+          {% elif v.status == 'fail' or v.status == 'failed' %}❌
+          {% elif v.status == 'processing' %}🔄
+          {% else %}⏳{% endif %}
+        </span>
+        <span class="v-title" title="{{ v.title }}">{{ v.title }}</span>
+        <span class="v-meta">{{ v.duration }} · {{ v.play_count }}播放</span>
+        <span class="tag
+          {% if v.status == 'done' or v.status == 'ok' %}tag-done{% elif v.status == 'fail' or v.status == 'failed' %}tag-fail{% elif v.status == 'processing' %}tag-processing{% else %}tag-pending{% endif %}
+        ">{{ v.status or 'pending' }}</span>
+        {% if v.source %}<span style="color:#64748b;font-size:.7rem;font-weight:600;margin-left:4px">{{ v.source }}</span>{% endif %}
+      </div>
+      {% endfor %}
+      {% if not videos %}
+        {% if up.status == 'scanning' %}
+        <div class="empty-section" style="background:rgba(255,255,255,0.01);border-radius:16px;color:#c084fc">
+          ⏳ 正在首次拉取该 UP 主的视频列表，请稍候并刷新页面...
+        </div>
+        {% else %}
+        <div class="empty-section" style="background:rgba(255,255,255,0.01);border-radius:16px">暂无视频，点击"扫描新视频"</div>
+        {% endif %}
+      {% endif %}
+      </div>
+    </div>
   </div>
 </div>
-
-<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
-  <div class="stat-card"><div class="num" style="color:#a78bfa">{{ up.total_videos }}</div><div class="label">📹 总视频</div></div>
-  <div class="stat-card"><div class="num" style="color:#34d399">{{ up.processed_videos }}</div><div class="label">✅ 已完成</div></div>
-  <div class="stat-card"><div class="num" style="color:#fbbf24">{{ up.total_videos - up.processed_videos - up.failed_videos }}</div><div class="label">⏳ 待处理</div></div>
-  <div class="stat-card"><div class="num" style="color:#f87171">{{ up.failed_videos }}</div><div class="label">❌ 失败</div></div>
-</div>
-
-<div class="action-bar">
-  <a href="/up/{{ up.name }}/dashboard" class="btn btn-primary">📊 实时看板</a>
-  {% if up.status != 'processing' %}
-  <button class="btn btn-primary" onclick="triggerProcess('{{ up.name }}')">▶️ 开始处理</button>
-  <button class="btn btn-secondary" onclick="triggerScan('{{ up.name }}')">🔍 扫描新视频</button>
-  {% endif %}
-  {% if up.failed_videos > 0 %}
-  <button class="btn btn-secondary" onclick="retryFailed('{{ up.name }}')">🔄 重试失败</button>
-  {% endif %}
-  <button class="btn btn-danger" onclick="deleteUp('{{ up.name }}')">🗑️ 删除</button>
-</div>
-
-<p id="statusBar" style="font-size:.82rem;color:#6b7280;margin-bottom:12px;min-height:20px"></p>
-
-<div class="card">
-<h3>📹 视频列表 ({{ videos|length }})</h3>
-<div class="video-list">
-{% for v in videos %}
-<div class="video-item">
-  <span style="font-size:1rem">
-    {% if v.status == 'done' or v.status == 'ok' %}✅
-    {% elif v.status == 'fail' or v.status == 'failed' %}❌
-    {% elif v.status == 'processing' %}🔄
-    {% else %}⏳{% endif %}
-  </span>
-  <span class="v-title" title="{{ v.title }}">{{ v.title }}</span>
-  <span class="v-meta">{{ v.duration }} · {{ v.play_count }}播放</span>
-  <span class="tag
-    {% if v.status == 'done' or v.status == 'ok' %}tag-done{% elif v.status == 'fail' or v.status == 'failed' %}tag-fail{% elif v.status == 'processing' %}tag-processing{% else %}tag-pending{% endif %}
-  ">{{ v.status or 'pending' }}</span>
-  {% if v.source %}<span style="color:#6b7280;font-size:.68rem">{{ v.source }}</span>{% endif %}
-</div>
-{% endfor %}
-{% if not videos %}
-<div class="empty-section">暂无视频，点击"扫描新视频"</div>
-{% endif %}
-</div>
-</div>
+{% endblock %}
+{% block block_extra_scripts %}
 {% endblock %}
 {% block extra_scripts %}
 <script>

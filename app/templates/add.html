@@ -2,14 +2,30 @@
 {% block title %}添加 UP主{% endblock %}
 {% block extra_head %}
 <style>
-.form-card{max-width:520px;margin:40px auto}
-.form-card h1{font-size:1.3rem;color:#a78bfa;margin-bottom:8px}
-.form-card .hint{color:#6b7280;font-size:.83rem;margin-bottom:24px}
-.form-group{margin-bottom:20px}
-.form-group label{display:block;font-size:.85rem;color:#9ca3af;margin-bottom:6px}
-.result{background:#1a2e1a;border:1px solid #34d399;border-radius:8px;padding:16px;margin-top:16px;color:#34d399;font-size:.85rem;display:none}
-.result.error{background:#4a1d1d;border-color:#f87171;color:#f87171}
-.result a{color:#6ee7b7}
+.form-card{max-width:580px;margin:40px auto}
+.form-card h1{font-size:1.6rem;color:#c084fc;margin-bottom:8px;font-weight:800}
+.form-card .hint{color:#94a3b8;font-size:.88rem;margin-bottom:28px;font-weight:500}
+.form-group{margin-bottom:24px}
+.form-group label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:10px;font-weight:600;letter-spacing:0.5px}
+.result{
+  background:rgba(16, 185, 129, 0.08);
+  border: none;
+  border-radius:16px;
+  padding:20px;
+  margin-top:24px;
+  color:#34d399;
+  font-size:.88rem;
+  display:none;
+  box-shadow: 0 15px 40px -10px rgba(16, 185, 129, 0.2);
+  font-weight:600;
+  line-height:1.6;
+}
+.result.error{
+  background:rgba(239, 68, 68, 0.08);
+  color:#f87171;
+  box-shadow: 0 15px 40px -10px rgba(239, 68, 68, 0.2);
+}
+.result a{color:#6ee7b7;text-decoration:underline;font-weight:700}
 </style>
 {% endblock %}
 {% block content %}
@@ -21,20 +37,20 @@
     <label>B站 UP主 空间链接 或 UP主名字</label>
     <input type="text" id="urlInput" placeholder="输入空间链接，或直接输入UP主名字（如：贾行家）" required autofocus>
   </div>
-  <button type="submit" class="btn btn-primary" style="width:100%;padding:12px" id="submitBtn">🔍 解析并添加</button>
+  <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;font-size:.92rem" id="submitBtn">🔍 解析并添加</button>
 </form>
 <div id="result" class="result"></div>
 </div>
 
-<div class="card" style="max-width:520px;margin:0 auto">
+<div class="card" style="max-width:580px;margin:0 auto">
 <h3>💡 使用说明</h3>
-<ul style="font-size:.82rem;color:#9ca3af;line-height:1.8;padding-left:18px">
+<ul style="font-size:.85rem;color:#94a3b8;line-height:1.9;padding-left:20px;font-weight:500">
   <li>支持任意 B站 UP主</li>
   <li>自动拉取全部公开视频列表</li>
   <li>生成 Obsidian 兼容的壳笔记</li>
   <li>自动运行流水线重构笔记内容</li>
   <li>每 {{ 6 }} 小时自动检查新视频</li>
-  <li>笔记输出到 Obsidian vault 的 10-B站笔记/ 目录</li>
+  <li>笔记输出到 Obsidian vault 的 <code style="color:#c084fc;font-weight:700;font-family:monospace">10-B站笔记/</code> 目录</li>
 </ul>
 </div>
 {% endblock %}
@@ -54,7 +70,17 @@ async function submitAdd(e){
     const d=await r.json();
     if(r.ok){
       result.className='result';
-      result.innerHTML=`✅ <strong>${d.up_name}</strong> 已添加！<br>📊 <a href="/up/${d.up_name}">查看详情</a> | <a href="/up/${d.up_name}/dashboard">实时看板</a>`;
+      let msg = `✅ <strong>${d.up_name}</strong> 已添加！`;
+      if(d.status === 'exists'){
+        msg = `ℹ️ <strong>${d.up_name}</strong> 已经订阅过，且没有新视频。`;
+      } else if(d.status === 'updated'){
+        msg = `✅ <strong>${d.up_name}</strong> 已更新！扫描到 ${d.new_videos} 个新视频，已启动后台处理。`;
+      } else if(d.status === 'updated_busy'){
+        msg = `✅ <strong>${d.up_name}</strong> 已更新！扫描到 ${d.new_videos} 个新视频。当前正有任务运行，新视频已加入排队。`;
+      } else if(d.status === 'created'){
+        msg = `✅ <strong>${d.up_name}</strong> 已成功订阅！正在首次拉取视频列表中...`;
+      }
+      result.innerHTML=`${msg}<br>📊 <a href="/up/${d.up_name}">查看详情</a> | <a href="/up/${d.up_name}/dashboard">实时看板</a>`;
       result.style.display='block';
       document.getElementById('urlInput').value='';
     }else{

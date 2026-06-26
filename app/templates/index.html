@@ -2,35 +2,89 @@
 {% block title %}总控面板{% endblock %}
 {% block extra_head %}
 <style>
-.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
-.stat-card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:16px;text-align:center}
-.stat-card .num{font-size:2rem;font-weight:700}
-.stat-card .label{font-size:.78rem;color:#6b7280;margin-top:4px}
-.up-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.up-card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:20px;transition:border-color .2s;display:flex;flex-direction:column;gap:12px}
-.up-card:hover{border-color:#7c3aed}
-.up-card .up-header{display:flex;align-items:center;gap:12px}
-.up-card .up-avatar{width:40px;height:40px;border-radius:50%;background:#2d2d4a;overflow:hidden;flex-shrink:0}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:32px}
+.stat-card{
+  background:rgba(255, 255, 255, 0.012);
+  backdrop-filter:blur(30px);
+  -webkit-backdrop-filter:blur(30px);
+  border: none;
+  border-radius:24px;
+  padding:24px 16px;
+  text-align:center;
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.35);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 25px 60px -10px rgba(192, 132, 252, 0.18);
+  background:rgba(255, 255, 255, 0.02);
+}
+.stat-card .num{font-size:2.4rem;font-weight:800;letter-spacing:-1.5px}
+.stat-card .label{font-size:.8rem;color:#94a3b8;margin-top:8px;font-weight:600;letter-spacing:0.5px}
+.up-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px}
+.up-card{
+  background:rgba(255, 255, 255, 0.015);
+  backdrop-filter:blur(30px);
+  -webkit-backdrop-filter:blur(30px);
+  border: none;
+  border-radius:26px;
+  padding:28px;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+  box-shadow: 0 15px 45px -15px rgba(0,0,0,0.4);
+}
+.up-card:hover{
+  transform: translateY(-6px) scale(1.005);
+  background:rgba(255, 255, 255, 0.025);
+  box-shadow: 0 35px 80px -15px rgba(192, 132, 252, 0.22), 0 15px 50px -15px rgba(244, 114, 182, 0.08);
+}
+.up-card .up-header{display:flex;align-items:center;gap:14px}
+.up-card .up-avatar{
+  width:46px;
+  height:46px;
+  border-radius:50%;
+  background:rgba(255, 255, 255, 0.05);
+  overflow:hidden;
+  flex-shrink:0;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
 .up-card .up-avatar img{width:100%;height:100%;object-fit:cover}
-.up-card .up-name{font-size:1rem;font-weight:600;color:#e0e0f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.up-card .progress-wrap{margin:4px 0}
-.up-card .progress-bar{height:6px;background:#2d2d4a;border-radius:3px;overflow:hidden}
-.up-card .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#a78bfa,#f472b6);background-size:200% 100%;border-radius:3px;transition:width .5s ease;animation:flowLight 2s linear infinite}
+.up-card .up-name{font-size:1.05rem;font-weight:700;color:#f8fafc;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up-card .progress-wrap{margin:2px 0}
+.up-card .progress-bar{height:6px;background:rgba(255,255,255,0.04);border-radius:3px;overflow:hidden}
+.up-card .progress-fill{
+  height:100%;
+  background:linear-gradient(90deg, #8b5cf6, #c084fc, #f472b6);
+  background-size:200% 100%;
+  border-radius:3px;
+  transition:width .5s ease;
+  animation:flowLight 2.5s linear infinite;
+}
 @keyframes flowLight{0%{background-position:0% 50%}100%{background-position:200% 50%}}
-.up-card .progress-text{font-size:.72rem;color:#6b7280;margin-top:4px}
-.up-card .up-actions{display:flex;gap:8px;flex-wrap:wrap}
-.empty{text-align:center;padding:60px 20px;color:#6b7280}
-.empty .icon{font-size:3rem;margin-bottom:16px}
-.empty p{margin-bottom:20px}
+.up-card .progress-text{font-size:.78rem;color:#94a3b8;margin-top:6px;font-weight:600}
+.up-card .up-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.empty{text-align:center;padding:80px 20px;color:#64748b}
+.empty .icon{font-size:4rem;margin-bottom:20px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.05)}}
+.empty p{margin-bottom:24px;font-size:1rem;color:#94a3b8;font-weight:500}
+@media(max-width:900px){
+  .stats-grid{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:550px){
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+}
 </style>
 {% endblock %}
 {% block content %}
-<h1 style="font-size:1.4rem;margin-bottom:4px;color:#a78bfa">📊 总控面板</h1>
-<p style="color:#6b7280;font-size:.85rem;margin-bottom:8px">管理所有订阅的 B站 UP主视频笔记流水线 <span id="updateTime" style="color:#4b5563;font-size:.72rem"></span></p>
+<h1 style="font-size:1.6rem;margin-bottom:6px;background:linear-gradient(135deg, #c084fc, #f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:800">📊 总控面板</h1>
+<p style="color:#94a3b8;font-size:.9rem;margin-bottom:28px;font-weight:500">管理所有订阅的 B站 UP主视频笔记流水线 <span id="updateTime" style="color:#64748b;font-size:.78rem;margin-left:8px"></span></p>
 
 <div class="stats-grid" id="statsGrid">
   <div class="stat-card">
-    <div class="num" style="color:#a78bfa" id="statUps">{{ ups|length }}</div>
+    <div class="num" style="color:#c084fc" id="statUps">{{ ups|length }}</div>
     <div class="label">👤 订阅UP主</div>
   </div>
   <div class="stat-card">
@@ -46,7 +100,7 @@
     <div class="label">❌ 失败</div>
   </div>
   <div class="stat-card">
-    <div class="num" style="color:#a78bfa" id="statProcessing">-</div>
+    <div class="num" style="color:#c4b5fd" id="statProcessing">-</div>
     <div class="label">🔄 处理中</div>
   </div>
 </div>
@@ -78,10 +132,10 @@
     <div class="up-actions">
       <a href="/up/{{ up.name }}" class="btn btn-secondary btn-sm">📋 详情</a>
       <a href="/up/{{ up.name }}/dashboard" class="btn btn-secondary btn-sm">📊 看板</a>
-      {% if up.status != 'processing' %}
+      {% if up.status != 'processing' and up.status != 'scanning' %}
       <button class="btn btn-primary btn-sm" onclick="triggerProcess('{{ up.name }}',event)">▶️ 处理</button>
       {% endif %}
-      {% if up.failed_videos > 0 %}
+      {% if up.failed_videos > 0 and up.status != 'processing' and up.status != 'scanning' %}
       <button class="btn btn-secondary btn-sm" onclick="retryFailed('{{ up.name }}')">🔄 重试失败</button>
       {% endif %}
     </div>
@@ -148,8 +202,8 @@ async function refreshUpCards(){
         <div class="up-actions">
           <a href="/up/${up.name}" class="btn btn-secondary btn-sm">📋 详情</a>
           <a href="/up/${up.name}/dashboard" class="btn btn-secondary btn-sm">📊 看板</a>
-          ${up.status!=='processing'?`<button class="btn btn-primary btn-sm" onclick="triggerProcess('${up.name}',event)">▶️ 处理</button>`:''}
-          ${up.failed_videos>0?`<button class="btn btn-secondary btn-sm" onclick="retryFailed('${up.name}')">🔄 重试失败</button>`:''}
+          ${(up.status!=='processing' && up.status!=='scanning')?`<button class="btn btn-primary btn-sm" onclick="triggerProcess('${up.name}',event)">▶️ 处理</button>`:''}
+          ${(up.failed_videos>0 && up.status!=='processing' && up.status!=='scanning')?`<button class="btn btn-secondary btn-sm" onclick="retryFailed('${up.name}')">🔄 重试失败</button>`:''}
         </div>
       </div>`;
     }).join('');

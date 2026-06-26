@@ -3,18 +3,52 @@
 {% block extra_head %}
 <style>
 .login-container{max-width:600px;margin:30px auto}
-.login-card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:24px;text-align:center}
-.login-card h2{font-size:1.2rem;color:#a78bfa;margin-bottom:8px}
-.login-card .hint{color:#6b7280;font-size:.82rem;margin-bottom:24px}
-.qrcode-box{background:#000;padding:20px;border-radius:12px;display:inline-block;margin:0 auto;min-width:320px;min-height:320px}
+.login-card{
+  background:rgba(255, 255, 255, 0.015);
+  backdrop-filter:blur(40px) saturate(160%);
+  -webkit-backdrop-filter:blur(40px) saturate(160%);
+  border: none;
+  border-radius:28px;
+  padding:36px 24px;
+  text-align:center;
+  box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.login-card h2{font-size:1.5rem;color:#c084fc;margin-bottom:8px;font-weight:800}
+.login-card .hint{color:#94a3b8;font-size:.85rem;margin-bottom:24px;font-weight:500}
+.qrcode-box{
+  background:rgba(0, 0, 0, 0.4);
+  border: none;
+  padding:24px;
+  border-radius:24px;
+  display:inline-block;
+  margin:0 auto;
+  min-width:320px;
+  min-height:320px;
+  box-shadow: inset 0 4px 30px rgba(0,0,0,0.6);
+}
 .qrcode-box pre{color:#fff;font-family:'Courier New',monospace;font-size:10px;line-height:1.1;margin:0;white-space:pre}
-.status-bar{margin-top:20px;padding:12px 20px;border-radius:8px;font-size:.85rem}
-.status-bar.pending{background:#2e2a1a;color:#fbbf24;border:1px solid #5a4a1a}
-.status-bar.success{background:#1a2e1a;color:#34d399;border:1px solid #2a5a2a}
-.status-bar.error{background:#4a1d1d;color:#f87171;border:1px solid #5a2d2d}
-.loading{display:inline-block;width:20px;height:20px;border:2px solid #2d2d4a;border-top-color:#a78bfa;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
+.status-bar{margin-top:24px;padding:14px 20px;border-radius:14px;font-size:.88rem;font-weight:700;letter-spacing:0.5px}
+.status-bar.pending{
+  background:rgba(251, 191, 36, 0.08);
+  color:#fbbf24;
+  border: none;
+  box-shadow: 0 15px 40px -10px rgba(251, 191, 36, 0.12);
+}
+.status-bar.success{
+  background:rgba(16, 185, 129, 0.08);
+  color:#34d399;
+  border: none;
+  box-shadow: 0 15px 40px -10px rgba(16, 185, 129, 0.12);
+}
+.status-bar.error{
+  background:rgba(239, 68, 68, 0.08);
+  color:#f87171;
+  border: none;
+  box-shadow: 0 15px 40px -10px rgba(239, 68, 68, 0.12);
+}
+.loading{display:inline-block;width:20px;height:20px;border:2.5px solid rgba(255,255,255,0.05);border-top-color:#c084fc;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.refresh-info{margin-top:12px;font-size:.72rem;color:#4b5563}
+.refresh-info{margin-top:16px;font-size:.78rem;color:#64748b;font-weight:600}
 </style>
 {% endblock %}
 {% block content %}
@@ -24,7 +58,7 @@
   <p class="hint">打开 Bilibili App 扫描二维码，确认登录</p>
 
   <div class="qrcode-box" id="qrBox">
-    <pre id="qrText" style="color:#9ca3af">点击下方按钮生成二维码...</pre>
+    <pre id="qrText" style="color:#94a3b8">点击下方按钮生成二维码...</pre>
   </div>
 
   <div class="status-bar pending" id="statusBar">
@@ -32,15 +66,15 @@
     <span id="statusText">等待扫码</span>
   </div>
 
-  <button class="btn btn-primary" onclick="startLogin()" id="startBtn" style="margin-top:12px">
+  <button class="btn btn-primary" onclick="startLogin()" id="startBtn" style="margin-top:16px">
     🔄 生成二维码
   </button>
   <p class="refresh-info" id="refreshInfo"></p>
 </div>
 
-<div class="card" style="margin-top:16px">
+<div class="card" style="margin-top:20px">
   <h3>💡 说明</h3>
-  <ul style="font-size:.82rem;color:#9ca3af;line-height:1.8;padding-left:18px">
+  <ul style="font-size:.85rem;color:#94a3b8;line-height:1.9;padding-left:20px;font-weight:500">
     <li>二维码有效期约 3 分钟</li>
     <li>扫码后在手机上点「确认登录」</li>
     <li>登录成功后即可添加 UP主</li>

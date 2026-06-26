@@ -95,6 +95,26 @@ def get_up_info(uid: str) -> Optional[dict]:
 
 def _get_avatar(uid: str) -> str:
     """获取 UP主 头像 URL"""
+    # 优先采用免 Cookie 且防风控性能强的 Card API
+    try:
+        r = requests.get(
+            f"https://api.bilibili.com/x/web-interface/card?mid={uid}",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.bilibili.com/",
+            },
+            timeout=10,
+        )
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("code") == 0:
+                face = res.get("data", {}).get("card", {}).get("face", "")
+                if face:
+                    return face
+    except Exception:
+        pass
+
+    # 降级备用方案：原有的 space/acc/info 接口（依赖登录凭证）
     try:
         cred_path = os.path.expanduser("~/.bilibili-cli/credential.json")
         if os.path.exists(cred_path):
@@ -399,20 +419,35 @@ def load_bili_cookie() -> Optional[str]:
     return None
 
 
+_cached_my_info = None
+_cached_my_info_time = 0.0
+
 def get_my_info() -> Optional[dict]:
-    """获取当前登录用户信息"""
+    """获取当前登录用户信息 (带 5分钟 内存缓存)"""
+    global _cached_my_info, _cached_my_info_time
+    now = time.time()
+    if _cached_my_info is not None and (now - _cached_my_info_time) < 300:
+        return _cached_my_info if _cached_my_info != "logged_out" else None
+
     try:
         data = _run_bili(["whoami", "--json"], timeout=10)
-        if isinstance(data, dict):
+        if isinstance(data, dict) and data.get("data", {}).get("user", {}):
             user = data.get("data", {}).get("user", {})
-            return {
+            _cached_my_info = {
                 "uid": user.get("id", ""),
                 "name": user.get("name", user.get("username", "")),
                 "level": user.get("level", 0),
                 "sign": user.get("sign", ""),
             }
+            _cached_my_info_time = now
+            return _cached_my_info
+        else:
+            _cached_my_info = "logged_out"
+            _cached_my_info_time = now
     except Exception:
-        pass
+        # 发生异常时，短缓存 15 秒以防重复发起进程卡死服务
+        _cached_my_info = "logged_out"
+        _cached_my_info_time = now - 285
     return None
 
 

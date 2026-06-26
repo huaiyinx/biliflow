@@ -239,6 +239,14 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
                     name, uid, existing["id"], new_videos
                 )
                 if shell_notes:
+                    if is_processing(name) or existing["status"] == "processing":
+                        return {
+                            "status": "updated_busy",
+                            "up_name": name,
+                            "new_videos": len(new_videos),
+                            "url": f"https://{config.DOMAIN}/up/{name}",
+                            "message": f"已扫描到 {len(new_videos)} 个新视频。由于该 UP 主正在处理中，新视频已加入排队。",
+                        }
                     t = threading.Thread(
                         target=run_pipeline_for_up,
                         args=(name, existing["id"], shell_notes),
@@ -266,17 +274,31 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
 
     # 后台扫描视频
     def scan_and_create():
-        videos = get_all_videos(uid)
-        if videos:
-            shell_notes = create_shell_notes_batch(name, uid, up_id, videos)
+        try:
+            videos = get_all_videos(uid)
+            if videos:
+                shell_notes = create_shell_notes_batch(name, uid, up_id, videos)
+                with get_db() as db:
+                    db.execute(
+                        "UPDATE up_masters SET status='idle' WHERE id=?",
+                        (up_id,),
+                    )
+                # 自动开始处理
+                if shell_notes:
+                    run_pipeline_for_up(name, up_id, shell_notes)
+            else:
+                with get_db() as db:
+                    db.execute(
+                        "UPDATE up_masters SET status='idle' WHERE id=?",
+                        (up_id,),
+                    )
+        except Exception as e:
+            print(f"首次扫描 UP主 {name} 失败: {e}")
             with get_db() as db:
                 db.execute(
                     "UPDATE up_masters SET status='idle' WHERE id=?",
                     (up_id,),
                 )
-            # 自动开始处理
-            if shell_notes:
-                run_pipeline_for_up(name, up_id, shell_notes)
 
     t = threading.Thread(target=scan_and_create, daemon=True)
     t.start()

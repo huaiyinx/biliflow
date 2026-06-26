@@ -4,39 +4,195 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BiliFlow · {% block title %}B站笔记工坊{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f0f1a;color:#e0e0f0;min-height:100vh}
-a{color:#a78bfa;text-decoration:none}
-a:hover{color:#c4b5fd}
-nav{background:#1a1a2e;border-bottom:1px solid #2d2d4a;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
-nav .logo{font-size:1.2rem;font-weight:700;color:#a78bfa}
-nav .logo span{color:#6b7280;font-weight:400;font-size:.85rem;margin-left:8px}
-nav a.nav-link{font-size:.85rem;color:#9ca3af;padding:6px 12px;border-radius:6px;transition:all .2s}
-nav a.nav-link:hover{color:#e0e0f0;background:#2d2d4a}
-.container{max-width:960px;margin:0 auto;padding:24px}
-.flash{background:#1a2e1a;border:1px solid #34d399;color:#34d399;padding:12px 20px;border-radius:8px;margin-bottom:20px;font-size:.85rem}
-.card{background:#1a1a2e;border:1px solid #2d2d4a;border-radius:12px;padding:20px;margin-bottom:16px}
-.card h3{font-size:.9rem;color:#9ca3af;margin-bottom:12px}
-.btn{display:inline-block;padding:8px 20px;border-radius:8px;font-size:.85rem;font-weight:500;cursor:pointer;border:none;transition:all .15s;text-decoration:none}
-.btn-primary{background:#7c3aed;color:#fff}
-.btn-primary:hover{background:#6d28d9}
-.btn-secondary{background:#2d2d4a;color:#e0e0f0}
-.btn-secondary:hover{background:#3d3d5a}
-.btn-danger{background:#4a1d1d;color:#f87171}
-.btn-danger:hover{background:#5a2d2d}
-.btn-sm{padding:4px 12px;font-size:.75rem}
-.tag{display:inline-block;padding:3px 8px;border-radius:4px;font-size:.72rem;font-weight:500}
-.tag-done{background:#064e3b;color:#34d399}
-.tag-pending{background:#2e2a1a;color:#fbbf24}
-.tag-fail{background:#4a1d1d;color:#f87171}
-.tag-processing{background:#1a102e;color:#a78bfa}
-input,select{background:#0f0f1a;border:1px solid #2d2d4a;color:#e0e0f0;padding:10px 14px;border-radius:8px;font-size:.9rem;width:100%}
-input:focus{outline:none;border-color:#7c3aed}
-footer{text-align:center;padding:40px 24px;color:#4b5563;font-size:.75rem}
-@media(max-width:600px){.container{padding:12px}nav{padding:10px 12px;gap:12px}}
+body{
+  font-family:'Plus Jakarta Sans','Outfit',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background: radial-gradient(circle at 15% 15%, rgba(139, 92, 246, 0.2) 0%, transparent 60%),
+              radial-gradient(circle at 85% 85%, rgba(244, 114, 182, 0.12) 0%, transparent 55%),
+              radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 70%),
+              #030208;
+  background-attachment: fixed;
+  color:#f1f5f9;
+  min-height:100vh;
+  position:relative;
+  overflow-x:hidden;
+}
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.008) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.008) 1px, transparent 1px);
+  background-size: 80px 80px;
+  z-index: -1;
+  pointer-events: none;
+}
+body::after {
+  content: "";
+  position: fixed;
+  top: -15%;
+  left: 25%;
+  width: 70vw;
+  height: 70vw;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.12) 0%, transparent 65%);
+  filter: blur(140px);
+  z-index: -2;
+  pointer-events: none;
+}
+a{color:#d8b4fe;text-decoration:none;transition:all .4s cubic-bezier(0.16, 1, 0.3, 1)}
+a:hover{color:#f5d0fe;text-shadow: 0 0 12px rgba(216, 180, 254, 0.6)}
+nav{
+  background:rgba(8, 7, 16, 0.4);
+  backdrop-filter:blur(40px) saturate(180%);
+  -webkit-backdrop-filter:blur(40px) saturate(180%);
+  border: none;
+  border-radius:22px;
+  padding:14px 28px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  flex-wrap:wrap;
+  position:sticky;
+  top:20px;
+  z-index:1000;
+  max-width:1600px;
+  width:95%;
+  margin:20px auto 0 auto;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+nav .logo{
+  font-size:1.35rem;
+  font-weight:800;
+  background: linear-gradient(135deg, #c084fc, #f472b6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+}
+nav .logo span{
+  color:#4b5563;
+  -webkit-text-fill-color: #4b5563;
+  font-weight:400;
+  font-size:.8rem;
+  margin-left:8px;
+}
+nav a.nav-link{
+  font-size:.9rem;
+  color:#94a3b8;
+  padding:8px 18px;
+  border-radius:14px;
+  transition:all .3s cubic-bezier(0.16, 1, 0.3, 1);
+  font-weight:600;
+}
+nav a.nav-link:hover{
+  color:#ffffff;
+  background:rgba(255, 255, 255, 0.05);
+}
+.container{max-width:1650px;width:95%;margin:0 auto;padding:40px 0}
+.flash{
+  background:rgba(16, 185, 129, 0.08);
+  border: none;
+  color:#34d399;
+  padding:16px 24px;
+  border-radius:16px;
+  margin-bottom:32px;
+  font-size:.88rem;
+  font-weight:600;
+  box-shadow: 0 20px 50px -10px rgba(16, 185, 129, 0.15);
+}
+.card{
+  background:rgba(255, 255, 255, 0.015);
+  backdrop-filter:blur(40px) saturate(160%);
+  -webkit-backdrop-filter:blur(40px) saturate(160%);
+  border: none;
+  border-radius:28px;
+  padding:36px;
+  margin-bottom:30px;
+  box-shadow:0 40px 100px -30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition:all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card:hover{
+  transform:translateY(-6px);
+  background:rgba(255, 255, 255, 0.025);
+  box-shadow: 0 50px 120px -20px rgba(139, 92, 246, 0.18), 0 20px 80px -20px rgba(244, 114, 182, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.card h3{font-size:1.1rem;color:#f8fafc;margin-bottom:24px;font-weight:800;letter-spacing:0.5px}
+.btn{
+  display:inline-block;
+  padding:12px 26px;
+  border-radius:14px;
+  font-size:.9rem;
+  font-weight:600;
+  cursor:pointer;
+  border:none;
+  transition:all .4s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration:none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+.btn:active{
+  transform: scale(0.96);
+}
+.btn-primary{
+  background:linear-gradient(135deg, #8b5cf6, #db2777);
+  color:#fff;
+  box-shadow: 0 10px 30px -5px rgba(139, 92, 246, 0.4);
+}
+.btn-primary:hover{
+  box-shadow: 0 15px 40px -5px rgba(139, 92, 246, 0.6);
+  transform: translateY(-3px);
+}
+.btn-secondary{
+  background:rgba(255, 255, 255, 0.03);
+  border: none;
+  color:#f1f5f9;
+}
+.btn-secondary:hover{
+  background:rgba(255, 255, 255, 0.08);
+  transform: translateY(-3px);
+}
+.btn-danger{
+  background:rgba(239, 68, 68, 0.08);
+  border: none;
+  color:#f87171;
+}
+.btn-danger:hover{
+  background:rgba(239, 68, 68, 0.2);
+  transform: translateY(-3px);
+}
+.btn-sm{padding:8px 16px;font-size:.8rem;border-radius:10px}
+.tag{display:inline-block;padding:6px 14px;border-radius:10px;font-size:.75rem;font-weight:800;letter-spacing:0.5px}
+.tag-done{background:rgba(52, 211, 153, 0.08);color:#34d399}
+.tag-pending{background:rgba(251, 191, 36, 0.08);color:#fbbf24}
+.tag-fail{background:rgba(248, 113, 113, 0.08);color:#f87171}
+.tag-processing{background:rgba(167, 139, 250, 0.1);color:#c4b5fd}
+input,select{
+  background:rgba(255, 255, 255, 0.02);
+  border: none;
+  color:#f8fafc;
+  padding:14px 20px;
+  border-radius:14px;
+  font-size:.95rem;
+  width:100%;
+  transition: all .3s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(10px);
+}
+input:focus,select:focus{
+  outline:none;
+  box-shadow: 0 0 25px rgba(192, 132, 252, 0.2);
+  background:rgba(255, 255, 255, 0.05);
+}
+footer{text-align:center;padding:80px 24px;color:#475569;font-size:.82rem;letter-spacing:0.5px;font-weight:500}
+@media(max-width:768px){
+  nav{margin:16px;padding:10px 20px;width:auto}
+  .container{padding:32px 16px;width:100%}
+}
 .github-corner{position:fixed;top:0;right:0;z-index:9999}
-.github-corner svg{fill:#7c3aed;color:#0f0f1a}
+.github-corner svg{fill:#8b5cf6;color:#05040b}
 .github-corner:hover .octo-arm{transform-origin:130px 106px;animation:octo-wave 560ms ease-in-out}
 @keyframes octo-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}
 @media(max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octo-wave 560ms ease-in-out}}
