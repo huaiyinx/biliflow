@@ -78,4 +78,31 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
         CREATE INDEX IF NOT EXISTS idx_videos_bvid ON videos(bvid);
         CREATE INDEX IF NOT EXISTS idx_logs_up_id ON process_logs(up_id);
+
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'idle',
+            total_chapters INTEGER DEFAULT 0,
+            processed_chapters INTEGER DEFAULT 0,
+            failed_chapters INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS doc_chapters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+            chapter_index INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            note_path TEXT DEFAULT '',
+            note_file TEXT DEFAULT '',
+            error_msg TEXT,
+            processed_at TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(doc_id, chapter_index)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_doc_chapters_doc_id ON doc_chapters(doc_id);
+        CREATE INDEX IF NOT EXISTS idx_doc_chapters_status ON doc_chapters(status);
         """)
