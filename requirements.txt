@@ -8,3 +8,4 @@ bilibili-cli
 yt-dlp
 pyyaml
 av
+markitdown

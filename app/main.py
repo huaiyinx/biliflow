@@ -10,7 +10,7 @@ import requests
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -31,6 +31,7 @@ from scheduler import (
     create_shell_notes_batch, run_pipeline_for_up, update_moc,
     mark_processing,
 )
+from pipeline import process_document_pipeline
 
 app = FastAPI(title="BiliFlow", version="1.0.0")
 
@@ -612,6 +613,55 @@ async def api_me():
     if info:
         return {"logged_in": True, **info}
     return {"logged_in": False}
+
+
+# ===== 文档/书籍处理模块 =====
+
+@app.get("/docs", response_class=HTMLResponse)
+async def docs_page(request: Request):
+    """文档/书籍上传页面"""
+    with get_db() as db:
+        docs = db.execute("SELECT * FROM documents ORDER BY created_at DESC").fetchall()
+    return templates.TemplateResponse("docs.html", {
+        "request": request,
+        "docs": docs,
+        "domain": config.DOMAIN,
+    })
+
+
+@app.post("/api/docs/upload")
+async def api_docs_upload(file: UploadFile = File(...)):
+    """上传 PDF/书籍 文件"""
+    os.makedirs(os.path.join(config.PROJECTS_DIR, "docs"), exist_ok=True)
+    filename = file.filename
+    file_path = os.path.join(config.PROJECTS_DIR, "docs", filename)
+    
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+
+    with get_db() as db:
+        existing = db.execute("SELECT id FROM documents WHERE filename = ?", (filename,)).fetchone()
+        if not existing:
+            db.execute("INSERT INTO documents (filename, status) VALUES (?,'scanning')", (filename,))
+            doc_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        else:
+            doc_id = existing["id"]
+            db.execute("UPDATE documents SET status='scanning' WHERE id=?", (doc_id,))
+
+    # 启动后台任务处理文档 process_document_pipeline
+    import threading
+    t = threading.Thread(target=process_document_pipeline, args=(doc_id, filename, file_path), daemon=True)
+    t.start()
+
+    return {"status": "uploaded", "doc_id": doc_id, "filename": filename}
+
+
+@app.get("/api/docs")
+async def api_list_docs():
+    """列出所有已上传的文档"""
+    with get_db() as db:
+        docs = db.execute("SELECT * FROM documents ORDER BY created_at DESC").fetchall()
+    return [dict(d) for d in docs]
 
 
 # ===== 健康检查 =====
