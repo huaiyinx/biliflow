@@ -94,6 +94,20 @@
     <h3>📚 知识书籍与长文档 AI 萃取</h3>
     <p style="color:#94a3b8; font-size:0.95rem; margin-bottom: 24px;">支持 PDF / EPUB / Markdown 格式。上传后系统将自动调用 MarkItDown 解析，并由大模型进行按章提炼总结。</p>
 
+    <div style="background: rgba(255,255,255,0.02); padding: 20px; border-radius: 16px; margin-bottom: 30px;">
+        <h4 style="margin-bottom: 12px; color: #f8fafc;">🔗 从 Github 仓库批量导入</h4>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="githubRepoUrl" placeholder="输入 Github 仓库链接 (例如: https://github.com/ruankaodaren/ruankao)" style="flex:1;">
+            <button class="btn btn-primary" onclick="scanGithubRepo()" id="scanBtn" style="white-space: nowrap;">扫描仓库</button>
+        </div>
+        <div id="githubScanResult" style="display: none; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 16px; border-radius: 12px;">
+            <h5 style="margin-bottom: 12px; color: #a78bfa;">扫描结果 (<span id="scanCount">0</span> 个文档)</h5>
+            <div id="fileTree" style="max-height: 300px; overflow-y: auto; font-size: 0.9rem; color: #cbd5e1; margin-bottom: 16px; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="processSelectedFiles()" id="processBtn">处理选中文件</button>
+        </div>
+    </div>
+
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <div class="upload-icon">📄</div>
         <div class="upload-text">点击或拖拽文件到此处上传</div>
@@ -216,6 +230,103 @@ function handleFiles(files) {
         console.error('Error:', error);
         alert('上传发生网络错误');
         window.location.reload();
+    });
+}
+
+let currentScanId = null;
+
+function scanGithubRepo() {
+    const url = document.getElementById('githubRepoUrl').value.trim();
+    if(!url) return alert('请输入链接');
+    
+    const scanBtn = document.getElementById('scanBtn');
+    scanBtn.innerText = '正在扫描克隆中... (可能需要几分钟)';
+    scanBtn.disabled = true;
+    
+    fetch('/api/docs/github/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({repo_url: url})
+    })
+    .then(r => r.json())
+    .then(data => {
+        scanBtn.innerText = '扫描仓库';
+        scanBtn.disabled = false;
+        if(data.status === 'success') {
+            currentScanId = data.scan_id;
+            document.getElementById('githubScanResult').style.display = 'block';
+            document.getElementById('scanCount').innerText = data.files.length;
+            
+            // Build tree UI
+            const tree = document.getElementById('fileTree');
+            tree.innerHTML = '';
+            if(data.files.length === 0) {
+                tree.innerHTML = '<div style="color:#94a3b8">未找到支持的文档格式</div>';
+            } else {
+                data.files.forEach(f => {
+                    const label = document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.marginBottom = '6px';
+                    label.style.cursor = 'pointer';
+                    label.style.wordBreak = 'break-all';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = f.path;
+                    cb.className = 'gh-file-cb';
+                    cb.style.width = '18px';
+                    cb.style.height = '18px';
+                    cb.style.padding = '0';
+                    cb.style.marginRight = '10px';
+                    cb.style.flexShrink = '0';
+                    
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(f.path));
+                    tree.appendChild(label);
+                });
+            }
+        } else {
+            alert(data.message || '扫描失败');
+        }
+    })
+    .catch(e => {
+        scanBtn.innerText = '扫描仓库';
+        scanBtn.disabled = false;
+        alert('网络错误');
+    });
+}
+
+function processSelectedFiles() {
+    if(!currentScanId) return;
+    const cbs = document.querySelectorAll('.gh-file-cb:checked');
+    const selected = Array.from(cbs).map(cb => cb.value);
+    if(selected.length === 0) return alert('请至少勾选一个文件');
+    
+    const processBtn = document.getElementById('processBtn');
+    processBtn.innerText = '提交中...';
+    processBtn.disabled = true;
+    
+    fetch('/api/docs/github/process', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({scan_id: currentScanId, selected_files: selected})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.status === 'started') {
+            alert('已添加到队列，即将开始处理！');
+            window.location.reload();
+        } else {
+            alert(data.message || '处理失败');
+            processBtn.innerText = '处理选中文件';
+            processBtn.disabled = false;
+        }
+    })
+    .catch(e => {
+        processBtn.innerText = '处理选中文件';
+        processBtn.disabled = false;
+        alert('网络错误');
     });
 }
 </script>

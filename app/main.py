@@ -14,6 +14,10 @@ from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks, Uplo
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+import uuid
+import shutil
+import subprocess
 
 from config import config
 from db import get_db, init_db
@@ -662,6 +666,89 @@ async def api_list_docs():
     with get_db() as db:
         docs = db.execute("SELECT * FROM documents ORDER BY created_at DESC").fetchall()
     return [dict(d) for d in docs]
+
+
+GITHUB_TEMP_DIR = "/app/projects/github_scans"
+
+class GithubScanRequest(BaseModel):
+    repo_url: str
+
+@app.post("/api/docs/github/scan")
+async def api_github_scan(req: GithubScanRequest):
+    os.makedirs(GITHUB_TEMP_DIR, exist_ok=True)
+    scan_id = str(uuid.uuid4())
+    target_dir = os.path.join(GITHUB_TEMP_DIR, scan_id)
+    
+    # 格式化 repo url
+    repo_url = req.repo_url.strip()
+    cmd = ["git", "clone", "--depth", "1", repo_url, target_dir]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if proc.returncode != 0:
+            return {"status": "error", "message": f"Git Clone 失败: {proc.stderr}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+    # Scan for documents
+    docs = []
+    allowed_exts = {".pdf", ".md", ".epub", ".docx", ".txt"}
+    for root, dirs, files in os.walk(target_dir):
+        if ".git" in dirs:
+            dirs.remove(".git")
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in allowed_exts:
+                rel_path = os.path.relpath(os.path.join(root, f), target_dir)
+                # 将 \ 转换为 /，统一路径格式（适配不同平台）
+                rel_path = rel_path.replace("\\", "/")
+                docs.append({"path": rel_path, "name": f, "ext": ext})
+    
+    docs.sort(key=lambda x: x["path"])
+    return {"status": "success", "scan_id": scan_id, "files": docs}
+
+class GithubProcessRequest(BaseModel):
+    scan_id: str
+    selected_files: list[str]
+
+@app.post("/api/docs/github/process")
+async def api_github_process(req: GithubProcessRequest):
+    source_dir = os.path.join(GITHUB_TEMP_DIR, req.scan_id)
+    if not os.path.exists(source_dir):
+        raise HTTPException(404, "扫描会话未找到或已过期")
+    
+    os.makedirs(os.path.join(config.PROJECTS_DIR, "docs"), exist_ok=True)
+    
+    processed = []
+    for rel_path in req.selected_files:
+        src_path = os.path.join(source_dir, rel_path)
+        if os.path.exists(src_path):
+            filename = os.path.basename(rel_path)
+            # 避免覆盖重名文件，加上文件夹前缀
+            safe_filename = rel_path.replace("/", "_").replace("\\", "_")
+            dst_path = os.path.join(config.PROJECTS_DIR, "docs", safe_filename)
+            shutil.copy2(src_path, dst_path)
+            
+            with get_db() as db:
+                existing = db.execute("SELECT id FROM documents WHERE filename = ?", (safe_filename,)).fetchone()
+                if not existing:
+                    db.execute("INSERT INTO documents (filename, status) VALUES (?,'scanning')", (safe_filename,))
+                    doc_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+                else:
+                    doc_id = existing["id"]
+                    db.execute("UPDATE documents SET status='scanning' WHERE id=?", (doc_id,))
+            
+            # Start pipeline
+            t = threading.Thread(target=process_document_pipeline, args=(doc_id, safe_filename, dst_path), daemon=True)
+            t.start()
+            processed.append(safe_filename)
+
+    # Clean up the temp dir
+    try:
+        shutil.rmtree(source_dir)
+    except:
+        pass
+
+    return {"status": "started", "count": len(processed), "files": processed}
 
 
 # ===== 健康检查 =====
