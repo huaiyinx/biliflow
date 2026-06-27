@@ -649,3 +649,124 @@ def process_up_videos(up_name: str, video_list: list[dict], vault_dir: str,
     })
 
     return {"ok": ok, "fail": fail, "sv_fallback": sv}
+
+
+# ===== 文档/书籍 处理流水线 =====
+
+DOC_PROMPT = """# 角色与核心任务
+你是一位【软考高级讲师】与【AI知识萃取专家】。
+我将输入一本书籍或教材的某个章节内容（可能是由 PDF 转换而来的 Markdown，带有乱码或排版瑕疵）。
+你需要对内容进行深度萃取，输出高密度的 Obsidian 学习笔记。
+
+# 输出格式要求
+请使用以下结构输出笔记：
+## ⏱️ 章节速通 (TL;DR)
+- 核心考点：
+- 适用场景：
+
+## 🧠 核心概念剖析
+(提取3-5个最重要概念，用大白话解释)
+- **[概念1]**: 
+- **[概念2]**: 
+
+## 🎯 考试与实战重点
+(如果是软考内容，指出可能怎么考；否则指出实战怎么用)
+- 重点1:
+- 重点2:
+
+## 🧩 知识卡片
+(把最难记的部分做成易记的卡片格式)
+
+---
+章节文本：
+{text}
+"""
+
+def process_document_pipeline(doc_id: int, filename: str, file_path: str):
+    """
+    处理上传的文档：
+    1. MarkItDown 解析为 Markdown
+    2. 按长度切分章节
+    3. 调用大模型提炼
+    4. 写入 Obsidian
+    """
+    try:
+        from db import get_db
+        from markitdown import MarkItDown
+        
+        # 1. 提取文本
+        md = MarkItDown()
+        result = md.convert(file_path)
+        raw_text = result.text_content
+        
+        if not raw_text or len(raw_text) < 100:
+            with get_db() as db:
+                db.execute("UPDATE documents SET status='fail' WHERE id=?", (doc_id,))
+            return
+            
+        # 2. 简单切分 (按字符长度切分，每段 15000 字符)
+        CHUNK_SIZE = 15000
+        chunks = [raw_text[i:i+CHUNK_SIZE] for i in range(0, len(raw_text), CHUNK_SIZE)]
+        total_chunks = len(chunks)
+        
+        with get_db() as db:
+            db.execute("UPDATE documents SET total_chapters=?, status='processing' WHERE id=?", (total_chunks, doc_id))
+            for idx in range(total_chunks):
+                db.execute(
+                    "INSERT INTO doc_chapters (doc_id, chapter_index, title) VALUES (?, ?, ?)",
+                    (doc_id, idx+1, f"第 {idx+1} 部分")
+                )
+        
+        # 3. 处理每个切片
+        doc_name = os.path.splitext(filename)[0]
+        vault_dir = os.path.join(config.VAULT_ROOT, "05-学习与资料", "软考AI生成笔记", doc_name)
+        os.makedirs(vault_dir, exist_ok=True)
+        
+        processed = 0
+        failed = 0
+        for idx, chunk in enumerate(chunks):
+            try:
+                prompt = DOC_PROMPT.format(text=chunk)
+                note_content = call_llm(prompt, 3600)
+                
+                if note_content:
+                    note_path = os.path.join(vault_dir, f"Part_{idx+1:02d}.md")
+                    
+                    fm = [
+                        "---",
+                        f'title: "{doc_name} - Part {idx+1}"',
+                        "type: document_note",
+                        f'processed: "{time.strftime("%Y-%m-%d")}"',
+                        "---",
+                        ""
+                    ]
+                    
+                    final_note = "\n".join(fm) + f"# {doc_name} - 第 {idx+1} 部分\n\n" + note_content
+                    write_vault_file(note_path, final_note, created_by="book-flow-pipeline")
+                    
+                    processed += 1
+                    with get_db() as db:
+                        db.execute("UPDATE doc_chapters SET status='ok', note_path=? WHERE doc_id=? AND chapter_index=?", 
+                                  (note_path, doc_id, idx+1))
+                else:
+                    failed += 1
+                    with get_db() as db:
+                        db.execute("UPDATE doc_chapters SET status='fail' WHERE doc_id=? AND chapter_index=?", 
+                                  (doc_id, idx+1))
+            except Exception as e:
+                failed += 1
+                with get_db() as db:
+                    db.execute("UPDATE doc_chapters SET status='fail', error_msg=? WHERE doc_id=? AND chapter_index=?", 
+                              (str(e), doc_id, idx+1))
+            
+            with get_db() as db:
+                db.execute("UPDATE documents SET processed_chapters=?, failed_chapters=? WHERE id=?", 
+                          (processed, failed, doc_id))
+                          
+        with get_db() as db:
+            db.execute("UPDATE documents SET status='done' WHERE id=?", (doc_id,))
+            
+    except Exception as e:
+        from db import get_db
+        with get_db() as db:
+            db.execute("UPDATE documents SET status='fail' WHERE id=?", (doc_id,))
