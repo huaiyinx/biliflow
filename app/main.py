@@ -669,9 +669,49 @@ async def api_list_docs():
 
 
 GITHUB_TEMP_DIR = "/app/projects/github_scans"
+_github_scans = {}
 
 class GithubScanRequest(BaseModel):
     repo_url: str
+
+def do_git_clone_async(scan_id, repo_url, target_dir):
+    _github_scans[scan_id] = {"status": "cloning", "log": ["准备开始克隆..."], "files": []}
+    cmd = ["git", "clone", "--progress", "--depth", "1", repo_url, target_dir]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        for line in iter(proc.stdout.readline, ''):
+            if line:
+                _github_scans[scan_id]["log"].append(line.strip())
+                if len(_github_scans[scan_id]["log"]) > 10:
+                    _github_scans[scan_id]["log"].pop(0)
+        
+        proc.wait()
+        if proc.returncode != 0:
+            _github_scans[scan_id]["status"] = "error"
+            _github_scans[scan_id]["log"].append(f"Git Clone 失败 (code {proc.returncode})")
+            return
+            
+        # Scan for documents
+        docs = []
+        allowed_exts = {".pdf", ".md", ".epub", ".docx", ".txt"}
+        for root, dirs, files in os.walk(target_dir):
+            if ".git" in dirs:
+                dirs.remove(".git")
+            for f in files:
+                ext = os.path.splitext(f)[1].lower()
+                if ext in allowed_exts:
+                    rel_path = os.path.relpath(os.path.join(root, f), target_dir)
+                    rel_path = rel_path.replace("\\", "/")
+                    docs.append({"path": rel_path, "name": f, "ext": ext})
+        
+        docs.sort(key=lambda x: x["path"])
+        _github_scans[scan_id]["status"] = "success"
+        _github_scans[scan_id]["files"] = docs
+        _github_scans[scan_id]["log"].append("克隆并扫描完成")
+        
+    except Exception as e:
+        _github_scans[scan_id]["status"] = "error"
+        _github_scans[scan_id]["log"].append(f"内部错误: {str(e)}")
 
 @app.post("/api/docs/github/scan")
 async def api_github_scan(req: GithubScanRequest):
@@ -686,30 +726,16 @@ async def api_github_scan(req: GithubScanRequest):
     if match:
         repo_url = match.group(1)
         
-    cmd = ["git", "clone", "--depth", "1", repo_url, target_dir]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if proc.returncode != 0:
-            return {"status": "error", "message": f"Git Clone 失败: {proc.stderr}"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-    # Scan for documents
-    docs = []
-    allowed_exts = {".pdf", ".md", ".epub", ".docx", ".txt"}
-    for root, dirs, files in os.walk(target_dir):
-        if ".git" in dirs:
-            dirs.remove(".git")
-        for f in files:
-            ext = os.path.splitext(f)[1].lower()
-            if ext in allowed_exts:
-                rel_path = os.path.relpath(os.path.join(root, f), target_dir)
-                # 将 \ 转换为 /，统一路径格式（适配不同平台）
-                rel_path = rel_path.replace("\\", "/")
-                docs.append({"path": rel_path, "name": f, "ext": ext})
+    t = threading.Thread(target=do_git_clone_async, args=(scan_id, repo_url, target_dir), daemon=True)
+    t.start()
     
-    docs.sort(key=lambda x: x["path"])
-    return {"status": "success", "scan_id": scan_id, "files": docs}
+    return {"status": "started", "scan_id": scan_id}
+
+@app.get("/api/docs/github/scan/status/{scan_id}")
+async def api_github_scan_status(scan_id: str):
+    if scan_id not in _github_scans:
+        raise HTTPException(404, "扫描任务未找到或已过期")
+    return _github_scans[scan_id]
 
 class GithubProcessRequest(BaseModel):
     scan_id: str
