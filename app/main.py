@@ -617,7 +617,7 @@ async def api_me():
 
 # ===== 文档/书籍处理模块 =====
 
-@app.get("/docs", response_class=HTMLResponse)
+@app.get("/library", response_class=HTMLResponse)
 async def docs_page(request: Request):
     """文档/书籍上传页面"""
     with get_db() as db:
