@@ -679,8 +679,13 @@ async def api_github_scan(req: GithubScanRequest):
     scan_id = str(uuid.uuid4())
     target_dir = os.path.join(GITHUB_TEMP_DIR, scan_id)
     
+    import re
     # 格式化 repo url
     repo_url = req.repo_url.strip()
+    match = re.match(r"(https?://github\.com/[^/]+/[^/]+)", repo_url)
+    if match:
+        repo_url = match.group(1)
+        
     cmd = ["git", "clone", "--depth", "1", repo_url, target_dir]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
