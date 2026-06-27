@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}书籍与文档处理{% endblock %}
+{% block extra_head %}
+<style>
+.upload-zone {
+    border: 2px dashed rgba(167, 139, 250, 0.4);
+    border-radius: 20px;
+    padding: 60px 20px;
+    text-align: center;
+    background: rgba(139, 92, 246, 0.03);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    margin-bottom: 30px;
+}
+.upload-zone.dragover {
+    border-color: #a78bfa;
+    background: rgba(139, 92, 246, 0.1);
+    transform: scale(1.02);
+}
+.upload-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    display: inline-block;
+}
+.upload-text {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-bottom: 8px;
+}
+.upload-hint {
+    font-size: 0.9rem;
+    color: #94a3b8;
+}
+.doc-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+    margin-top: 20px;
+}
+.doc-table th {
+    text-align: left;
+    padding: 0 20px 10px 20px;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.doc-row {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 16px;
+    transition: all 0.3s ease;
+}
+.doc-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+    transform: translateX(4px);
+}
+.doc-row td {
+    padding: 16px 20px;
+}
+.doc-row td:first-child {
+    border-top-left-radius: 16px;
+    border-bottom-left-radius: 16px;
+}
+.doc-row td:last-child {
+    border-top-right-radius: 16px;
+    border-bottom-right-radius: 16px;
+}
+.doc-title {
+    font-weight: 600;
+    color: #f8fafc;
+    font-size: 1.05rem;
+}
+.progress-bar-container {
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #8b5cf6, #db2777);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>📚 知识书籍与长文档 AI 萃取</h3>
+    <p style="color:#94a3b8; font-size:0.95rem; margin-bottom: 24px;">支持 PDF / EPUB / Markdown 格式。上传后系统将自动调用 MarkItDown 解析，并由大模型进行按章提炼总结。</p>
+
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">点击或拖拽文件到此处上传</div>
+        <div class="upload-hint">支持 PDF, EPUB, DOCX, TXT 等格式</div>
+        <input type="file" id="fileInput" style="display: none;" accept=".pdf,.epub,.docx,.txt,.md" onchange="handleFiles(this.files)">
+    </div>
+
+    {% if docs %}
+    <table class="doc-table">
+        <thead>
+            <tr>
+                <th>文档名称</th>
+                <th>状态</th>
+                <th>处理进度</th>
+                <th>上传时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in docs %}
+            <tr class="doc-row">
+                <td>
+                    <div class="doc-title">{{ doc.filename }}</div>
+                </td>
+                <td>
+                    {% if doc.status == 'done' %}
+                        <span class="tag tag-done">✅ 已完成</span>
+                    {% elif doc.status == 'processing' %}
+                        <span class="tag tag-processing">⚡ 处理中</span>
+                    {% elif doc.status == 'fail' %}
+                        <span class="tag tag-fail">❌ 失败</span>
+                    {% else %}
+                        <span class="tag tag-pending">⏳ 待处理 / {{ doc.status }}</span>
+                    {% endif %}
+                </td>
+                <td style="min-width: 150px;">
+                    <div style="font-size:0.85rem; color:#cbd5e1; margin-bottom: 4px;">
+                        {% if doc.total_chapters > 0 %}
+                            {{ doc.processed_chapters }} / {{ doc.total_chapters }} 章
+                        {% else %}
+                            解析中...
+                        {% endif %}
+                    </div>
+                    <div class="progress-bar-container">
+                        {% set pct = (doc.processed_chapters / doc.total_chapters * 100) if doc.total_chapters > 0 else 0 %}
+                        <div class="progress-bar" style="width: {{ pct }}%;"></div>
+                    </div>
+                </td>
+                <td style="color:#94a3b8; font-size:0.85rem;">{{ doc.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 40px; color: #64748b;">暂无处理记录，快上传第一本教材吧！</div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const dropZone = document.getElementById('dropZone');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, highlight, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, unhighlight, false);
+});
+
+function highlight(e) {
+    dropZone.classList.add('dragover');
+}
+
+function unhighlight(e) {
+    dropZone.classList.remove('dragover');
+}
+
+dropZone.addEventListener('drop', handleDrop, false);
+
+function handleDrop(e) {
+    let dt = e.dataTransfer;
+    let files = dt.files;
+    handleFiles(files);
+}
+
+function handleFiles(files) {
+    if(files.length === 0) return;
+    const file = files[0];
+    
+    // UI Update to show uploading
+    dropZone.innerHTML = `<div class="upload-icon">⏳</div><div class="upload-text">正在上传 ${file.name}...</div>`;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    fetch('/api/docs/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.status === 'uploaded') {
+            window.location.reload();
+        } else {
+            alert('上传失败: ' + (data.message || '未知错误'));
+            window.location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('上传发生网络错误');
+        window.location.reload();
+    });
+}
+</script>
+{% endblock %}
