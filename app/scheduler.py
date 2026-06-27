@@ -483,6 +483,24 @@ def run_pipeline_for_up(up_name: str, up_id: int, video_list: list[dict]):
     finally:
         mark_processing(up_name, False)
 
+def cleanup_github_scans():
+    """定期清理过期的 Github 临时缓存 (保留1小时)"""
+    scan_dir = "/app/projects/github_scans"
+    if not os.path.exists(scan_dir):
+        return
+    import shutil
+    import time
+    now = time.time()
+    for item in os.listdir(scan_dir):
+        item_path = os.path.join(scan_dir, item)
+        if os.path.isdir(item_path):
+            # 如果文件夹修改时间超过1小时 (3600秒)
+            if now - os.path.getmtime(item_path) > 3600:
+                try:
+                    shutil.rmtree(item_path)
+                    logger.info(f"清理过期 Github 缓存: {item}")
+                except Exception as e:
+                    logger.error(f"清理缓存失败: {e}")
 
 def start_scheduler():
     """启动定时任务"""
@@ -495,6 +513,12 @@ def start_scheduler():
         "interval",
         hours=interval,
         id="check_updates",
+    )
+    scheduler.add_job(
+        cleanup_github_scans,
+        "interval",
+        minutes=30,
+        id="cleanup_github_scans",
     )
     scheduler.start()
     logger.info(f"⏰ 定时检查已启动: 每 {interval} 小时")

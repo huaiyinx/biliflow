@@ -773,11 +773,11 @@ async def api_github_process(req: GithubProcessRequest):
             t.start()
             processed.append(safe_filename)
 
-    # Clean up the temp dir
-    try:
-        shutil.rmtree(source_dir)
-    except:
-        pass
+    # 移除立即删除逻辑，改由定时任务清理，方便用户分批次勾选处理
+    # try:
+    #     shutil.rmtree(source_dir)
+    # except:
+    #     pass
 
     return {"status": "started", "count": len(processed), "files": processed}
 
