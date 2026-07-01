@@ -1,8 +1,11 @@
 FROM python:3.12-slim
 
-# 系统依赖: ffmpeg 用于音频提取, curl 用于健康检查
+# 系统依赖: ffmpeg 用于音视频处理, tesseract 用于关键帧 OCR, curl 用于健康检查
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
     curl \
     git \
     ca-certificates \
