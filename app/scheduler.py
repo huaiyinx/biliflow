@@ -312,6 +312,14 @@ def create_shell_notes_batch(up_name: str, uid: str, up_id: int,
 
     up_dir = ensure_vault_dirs(up_name)
 
+    with get_db() as db:
+        up_defaults = db.execute(
+            "SELECT note_profile, provider_strategy FROM up_masters WHERE id = ?",
+            (up_id,),
+        ).fetchone()
+    default_note_profile = (up_defaults["note_profile"] if up_defaults else None) or "ai_watch_l1"
+    default_provider_strategy = (up_defaults["provider_strategy"] if up_defaults else None) or "auto_low_cost"
+
     shell_notes = []
 
     for raw_video in videos:
@@ -332,6 +340,8 @@ bvid: "{bvid}"
 duration: "{v.get('duration', '?')}"
 play_count: {v.get('play_count', 0)}
 status: pending
+note_profile: "{default_note_profile}"
+provider_strategy: "{default_provider_strategy}"
 created: {datetime.now().strftime("%Y-%m-%d")}
 ---
 
@@ -353,15 +363,16 @@ created: {datetime.now().strftime("%Y-%m-%d")}
             ).fetchone()
             if existing:
                 db.execute(
-                    "UPDATE videos SET title=?, duration=?, play_count=?, note_path=?, note_file=? WHERE id=?",
+                    "UPDATE videos SET title=?, duration=?, play_count=?, note_path=?, note_file=?, note_profile=COALESCE(NULLIF(note_profile, ''), ?), provider_strategy=COALESCE(NULLIF(provider_strategy, ''), ?) WHERE id=?",
                     (title, v.get("duration", "?"), v.get("play_count", 0),
-                     filepath, filename, existing["id"]),
+                     filepath, filename, default_note_profile, default_provider_strategy, existing["id"]),
                 )
             else:
                 db.execute(
-                    "INSERT INTO videos (bvid, up_id, title, duration, play_count, note_path, note_file) VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO videos (bvid, up_id, title, duration, play_count, note_path, note_file, note_profile, provider_strategy) VALUES (?,?,?,?,?,?,?,?,?)",
                     (bvid, up_id, title, v.get("duration", "?"),
-                     v.get("play_count", 0), filepath, filename),
+                     v.get("play_count", 0), filepath, filename,
+                     default_note_profile, default_provider_strategy),
                 )
 
         shell_notes.append({
@@ -369,6 +380,8 @@ created: {datetime.now().strftime("%Y-%m-%d")}
             "title": title,
             "note_path": filepath,
             "note_file": filename,
+            "note_profile": default_note_profile,
+            "provider_strategy": default_provider_strategy,
         })
 
     refresh_note_navigation(up_name, up_id, up_dir)

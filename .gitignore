@@ -7,6 +7,7 @@ data/
 
 # 临时文件
 projects/
+.codex-backups/
 __pycache__/
 *.pyc
 .DS_Store

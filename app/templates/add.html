@@ -7,6 +7,19 @@
 .form-card .hint{color:#94a3b8;font-size:.88rem;margin-bottom:28px;font-weight:500}
 .form-group{margin-bottom:24px}
 .form-group label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:10px;font-weight:600;letter-spacing:0.5px}
+.form-grid{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:24px}
+.form-select{
+  width:100%;
+  background:rgba(15,23,42,.78);
+  color:#e2e8f0;
+  border:1px solid rgba(148,163,184,.2);
+  border-radius:12px;
+  padding:12px 14px;
+  font-size:.9rem;
+  font-weight:600;
+}
+.field-help{color:#64748b;font-size:.76rem;margin-top:7px;line-height:1.5}
+@media(min-width:720px){.form-grid{grid-template-columns:1fr 1fr}}
 .result{
   background:rgba(16, 185, 129, 0.08);
   border: none;
@@ -37,6 +50,26 @@
     <label>B站 UP主 空间链接 或 UP主名字</label>
     <input type="text" id="urlInput" placeholder="输入空间链接，或直接输入UP主名字（如：贾行家）" required autofocus>
   </div>
+  <div class="form-grid">
+    <div>
+      <label>AI看处理档位</label>
+      <select id="noteProfileInput" class="form-select">
+        {% for value, label in note_profiles.items() %}
+        <option value="{{ value }}" {% if value == 'ai_watch_l1' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="field-help">普通职场/PPT课建议 Level 1；软件操作/代码演示建议 Level 2。</div>
+    </div>
+    <div>
+      <label>平台接力策略</label>
+      <select id="providerStrategyInput" class="form-select">
+        {% for value, label in provider_strategies.items() %}
+        <option value="{{ value }}" {% if value == 'auto_low_cost' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="field-help">默认先用免费/低价能力，失败或不够好再切换。</div>
+    </div>
+  </div>
   <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;font-size:.92rem" id="submitBtn">🔍 解析并添加</button>
 </form>
 <div id="result" class="result"></div>
@@ -66,6 +99,8 @@ async function submitAdd(e){
   result.style.display='none';
   try{
     const fd=new FormData();fd.append('url',url);
+    fd.append('note_profile',document.getElementById('noteProfileInput').value);
+    fd.append('provider_strategy',document.getElementById('providerStrategyInput').value);
     const r=await fetch('/api/up',{method:'POST',body:fd});
     const d=await r.json();
     if(r.ok){

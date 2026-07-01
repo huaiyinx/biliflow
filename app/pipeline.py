@@ -98,6 +98,83 @@ FULL_PROMPT = """# 角色与核心任务
 文本：{transcript}"""
 
 
+AI_WATCH_PROFILE_HINTS = {
+    "ai_watch_l0": "本次按 Level 0 字幕版处理：优先基于字幕生成轻量 AI看导航，不要假装看到了视频画面。",
+    "ai_watch_l1": "本次按 Level 1 字幕+关键帧OCR目标处理：当前输入以字幕为主，输出要预留课件/屏幕重点位置；如缺少画面证据，请明确基于字幕判断。",
+    "ai_watch_l2": "本次按 Level 2 字幕+OCR+关键帧视觉目标处理：当前输入以字幕为主，输出要更强调时间轴导看和操作步骤；缺少画面证据时不要编造视觉细节。",
+    "ai_watch_l3": "本次按 Level 3 全视频理解目标处理：如当前没有视频视觉输入，请先生成字幕版 AI看，并标注视觉理解待补充。",
+}
+
+
+AI_WATCH_PROMPT = """# 角色与任务
+你是一个类似百度网盘“AI看”的视频学习助手。
+我会给你一段中文视频字幕/转写文本。请优先生成播放器侧栏式的学习导航，而不是长篇文章。
+
+# 当前处理策略
+- 处理档位：{note_profile}
+- 平台接力策略：{provider_strategy}
+- 档位说明：{profile_hint}
+
+# 输出要求
+1. 先给“AI看”轻量层，帮助用户快速决定怎么看、看哪里、哪些可以跳过。
+2. 必须保留时间戳线索；如果原文时间戳不足，按内容顺序给近似章节。
+3. 不要编造画面信息。没有截图/OCR/视觉输入时，只能说“根据字幕判断”。
+4. 再给“AI笔记”层，包括要点、行动项、练习题、脑图大纲。
+5. 最后给“深度理解”层，保持简洁，不要喧宾夺主。
+
+# 输出模板
+
+## AI看
+
+### 一句话看懂
+
+### 3分钟速览
+
+### 时间轴导看
+- `[00:00]` 标题：为什么重要；建议怎么看
+
+### 必看 / 可跳过 / 建议回看
+- **必看**：
+- **可跳过**：
+- **建议回看**：
+
+### 可以追问我的问题
+- 
+
+## AI笔记
+
+### 课程要点
+
+### 关键概念
+
+### 行动项
+
+## AI出题
+
+### 选择题
+
+### 思考题
+
+## AI脑图
+
+```mermaid
+mindmap
+  root(({title}))
+```
+
+## 深度理解
+
+### 私人导师讲解
+
+### 适用边界
+
+### 职场迁移
+
+---
+标题：{title}
+文本：{transcript}"""
+
+
 # ===== 进度管理 =====
 
 class ProgressTracker:
@@ -412,6 +489,8 @@ def existing_note_context(note_path: str) -> str | None:
 def process_one_video(
     bvid: str, title: str, note_path: str,
     audio_dir: str, progress: ProgressTracker,
+    note_profile: str = "ai_watch_l1",
+    provider_strategy: str = "auto_low_cost",
 ) -> tuple[str, str]:
     note_context = existing_note_context(note_path)
     if os.path.exists(note_path):
@@ -492,7 +571,14 @@ def process_one_video(
         else:
             return "fail", "short"
 
-    prompt = FULL_PROMPT.format(title=title, transcript=transcript[:8000])
+    prompt_template = AI_WATCH_PROMPT if str(note_profile).startswith("ai_watch") else FULL_PROMPT
+    prompt = prompt_template.format(
+        title=title,
+        transcript=transcript[:8000],
+        note_profile=note_profile,
+        provider_strategy=provider_strategy,
+        profile_hint=AI_WATCH_PROFILE_HINTS.get(note_profile, AI_WATCH_PROFILE_HINTS["ai_watch_l1"]),
+    )
     result = call_llm(prompt, 3600)
     if not result:
         return "fail", "llm"
@@ -520,6 +606,8 @@ def process_one_video(
             'status: "done"',
             f'processed: "{time.strftime("%Y-%m-%d")}"',
             f'source: "{source}"',
+            f'note_profile: "{note_profile}"',
+            f'provider_strategy: "{provider_strategy}"',
             "---",
         ]
     else:
@@ -529,6 +617,8 @@ def process_one_video(
         has_status = False
         has_processed = False
         has_source = False
+        has_note_profile = False
+        has_provider_strategy = False
         for line in fm_lines:
             if line.startswith("title:"):
                 new_fm.append(f'title: "{title}"')
@@ -542,6 +632,12 @@ def process_one_video(
             elif line.startswith("source:"):
                 new_fm.append(f'source: "{source}"')
                 has_source = True
+            elif line.startswith("note_profile:"):
+                new_fm.append(f'note_profile: "{note_profile}"')
+                has_note_profile = True
+            elif line.startswith("provider_strategy:"):
+                new_fm.append(f'provider_strategy: "{provider_strategy}"')
+                has_provider_strategy = True
             elif line == "---" and len(new_fm) > 0:
                 if not has_title:
                     new_fm.append(f'title: "{title}"')
@@ -555,6 +651,12 @@ def process_one_video(
                 if not has_source:
                     new_fm.append(f'source: "{source}"')
                     has_source = True
+                if not has_note_profile:
+                    new_fm.append(f'note_profile: "{note_profile}"')
+                    has_note_profile = True
+                if not has_provider_strategy:
+                    new_fm.append(f'provider_strategy: "{provider_strategy}"')
+                    has_provider_strategy = True
                 new_fm.append(line)
             else:
                 new_fm.append(line)
@@ -602,6 +704,8 @@ def process_up_videos(up_name: str, video_list: list[dict], vault_dir: str,
         status, source = process_one_video(
             v["bvid"], v["title"], v["note_path"],
             audio_dir, progress,
+            v.get("note_profile") or "ai_watch_l1",
+            v.get("provider_strategy") or "auto_low_cost",
         )
 
         if status == "ok":

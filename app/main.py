@@ -39,6 +39,31 @@ from pipeline import process_document_pipeline
 
 app = FastAPI(title="BiliFlow", version="1.0.0")
 
+NOTE_PROFILES = {
+    "ai_watch_l0": "字幕版",
+    "ai_watch_l1": "字幕+关键帧OCR",
+    "ai_watch_l2": "字幕+OCR+关键帧视觉",
+    "ai_watch_l3": "全视频理解",
+}
+
+PROVIDER_STRATEGIES = {
+    "auto_low_cost": "自动低成本",
+    "bili_free_first": "B站免费优先",
+    "gemini_youtube_first": "YouTube Gemini优先",
+    "baidu_qianfan_first": "百度千帆优先",
+    "manual": "手动/暂不自动选择",
+}
+
+
+def normalize_note_profile(value: str | None) -> str:
+    value = (value or "ai_watch_l1").strip()
+    return value if value in NOTE_PROFILES else "ai_watch_l1"
+
+
+def normalize_provider_strategy(value: str | None) -> str:
+    value = (value or "auto_low_cost").strip()
+    return value if value in PROVIDER_STRATEGIES else "auto_low_cost"
+
 # 静态文件 + 模板
 os.makedirs("/app/static", exist_ok=True)
 os.makedirs("/app/templates", exist_ok=True)
@@ -75,6 +100,8 @@ async def index(request: Request):
         "request": request,
         "ups": ups,
         "domain": config.DOMAIN,
+        "note_profiles": NOTE_PROFILES,
+        "provider_strategies": PROVIDER_STRATEGIES,
     })
 
 
@@ -84,6 +111,8 @@ async def add_page(request: Request):
     return templates.TemplateResponse("add.html", {
         "request": request,
         "domain": config.DOMAIN,
+        "note_profiles": NOTE_PROFILES,
+        "provider_strategies": PROVIDER_STRATEGIES,
     })
 
 
@@ -117,6 +146,8 @@ async def project_page(request: Request, up_name: str):
         "videos": videos,
         "progress": progress,
         "domain": config.DOMAIN,
+        "note_profiles": NOTE_PROFILES,
+        "provider_strategies": PROVIDER_STRATEGIES,
     })
 
 
@@ -200,9 +231,16 @@ async def api_list_ups():
 
 
 @app.post("/api/up")
-async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = None):
+async def api_add_up(
+    url: str = Form(...),
+    note_profile: str = Form("ai_watch_l1"),
+    provider_strategy: str = Form("auto_low_cost"),
+    background_tasks: BackgroundTasks = None,
+):
     """添加 UP主"""
     input_str = url.strip()
+    note_profile = normalize_note_profile(note_profile)
+    provider_strategy = normalize_provider_strategy(provider_strategy)
     uid = None
 
     bvid = extract_bvid_from_url(input_str)
@@ -226,18 +264,18 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
             if existing:
                 up_id = existing["id"]
                 db.execute(
-                    "UPDATE up_masters SET name = ?, avatar = COALESCE(NULLIF(?, ''), avatar) WHERE id = ?",
-                    (name, avatar, up_id),
+                    "UPDATE up_masters SET name = ?, avatar = COALESCE(NULLIF(?, ''), avatar), note_profile = ?, provider_strategy = ? WHERE id = ?",
+                    (name, avatar, note_profile, provider_strategy, up_id),
                 )
             else:
                 db.execute(
-                    "INSERT INTO up_masters (uid, name, avatar, status) VALUES (?,?,?,'idle')",
-                    (uid, name, avatar),
+                    "INSERT INTO up_masters (uid, name, avatar, status, note_profile, provider_strategy) VALUES (?,?,?,'idle',?,?)",
+                    (uid, name, avatar, note_profile, provider_strategy),
                 )
                 up_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
             existing_video = db.execute(
-                "SELECT id, status, title, note_path, note_file FROM videos WHERE up_id = ? AND bvid = ?",
+                "SELECT id, status, title, note_path, note_file, note_profile, provider_strategy FROM videos WHERE up_id = ? AND bvid = ?",
                 (up_id, bvid),
             ).fetchone()
 
@@ -247,6 +285,8 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
                 "title": existing_video["title"] or video["title"],
                 "note_path": existing_video["note_path"],
                 "note_file": existing_video["note_file"],
+                "note_profile": existing_video["note_profile"] or note_profile,
+                "provider_strategy": existing_video["provider_strategy"] or provider_strategy,
             }]
         else:
             shell_notes = create_shell_notes_batch(name, uid, up_id, [video])
@@ -299,8 +339,8 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
         if existing:
             # 已存在，顺手刷新名称/头像，再扫描新视频
             db.execute(
-                "UPDATE up_masters SET name = ?, avatar = COALESCE(NULLIF(?, ''), avatar) WHERE id = ?",
-                (name, avatar, existing["id"]),
+                "UPDATE up_masters SET name = ?, avatar = COALESCE(NULLIF(?, ''), avatar), note_profile = ?, provider_strategy = ? WHERE id = ?",
+                (name, avatar, note_profile, provider_strategy, existing["id"]),
             )
             known = set(
                 r[0] for r in db.execute(
@@ -342,8 +382,8 @@ async def api_add_up(url: str = Form(...), background_tasks: BackgroundTasks = N
 
         # 新 UP主
         db.execute(
-            "INSERT INTO up_masters (uid, name, avatar, status) VALUES (?,?,?,'scanning')",
-            (uid, name, avatar),
+            "INSERT INTO up_masters (uid, name, avatar, status, note_profile, provider_strategy) VALUES (?,?,?,'scanning',?,?)",
+            (uid, name, avatar, note_profile, provider_strategy),
         )
         up_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -427,7 +467,7 @@ async def api_process_up(up_name: str):
 
         # 获取所有 pending 视频
         videos = db.execute(
-            "SELECT bvid, title, note_path, note_file FROM videos WHERE up_id = ? AND status = 'pending'",
+            "SELECT bvid, title, note_path, note_file, note_profile, provider_strategy FROM videos WHERE up_id = ? AND status = 'pending'",
             (up["id"],),
         ).fetchall()
 
@@ -439,6 +479,7 @@ async def api_process_up(up_name: str):
 
     video_list = [
         {"bvid": v["bvid"], "title": v["title"], "note_path": v["note_path"]}
+        | {"note_profile": v["note_profile"] or up["note_profile"], "provider_strategy": v["provider_strategy"] or up["provider_strategy"]}
         for v in videos
     ]
 
@@ -483,6 +524,51 @@ async def api_get_progress(up_name: str):
     }
 
 
+@app.post("/api/up/{up_name}/settings")
+async def api_update_up_settings(
+    up_name: str,
+    note_profile: str = Form(...),
+    provider_strategy: str = Form(...),
+    apply_pending: str = Form("1"),
+):
+    """更新 UP 主默认 AI看策略，并可同步到未处理视频。"""
+    note_profile = normalize_note_profile(note_profile)
+    provider_strategy = normalize_provider_strategy(provider_strategy)
+    should_apply_pending = str(apply_pending).lower() not in {"0", "false", "no", "off"}
+
+    with get_db() as db:
+        up = db.execute(
+            "SELECT * FROM up_masters WHERE name = ?", (up_name,)
+        ).fetchone()
+        if not up:
+            raise HTTPException(404, "UP主不存在")
+
+        db.execute(
+            "UPDATE up_masters SET note_profile = ?, provider_strategy = ? WHERE id = ?",
+            (note_profile, provider_strategy, up["id"]),
+        )
+
+        changed = 0
+        if should_apply_pending:
+            cur = db.execute(
+                """
+                UPDATE videos
+                   SET note_profile = ?, provider_strategy = ?
+                 WHERE up_id = ?
+                   AND status IN ('pending', 'fail', 'failed')
+                """,
+                (note_profile, provider_strategy, up["id"]),
+            )
+            changed = cur.rowcount or 0
+
+    return {
+        "status": "ok",
+        "note_profile": note_profile,
+        "provider_strategy": provider_strategy,
+        "pending_updated": changed,
+    }
+
+
 @app.delete("/api/up/{up_name}")
 async def api_delete_up(up_name: str):
     """删除 UP主（保留笔记文件）"""
@@ -509,7 +595,7 @@ async def api_retry_failed(up_name: str):
             raise HTTPException(404, "UP主不存在")
 
         failed = db.execute(
-            "SELECT bvid, title, note_path FROM videos WHERE up_id = ? AND status IN ('fail', 'failed')",
+            "SELECT bvid, title, note_path, note_profile, provider_strategy FROM videos WHERE up_id = ? AND status IN ('fail', 'failed')",
             (up["id"],),
         ).fetchall()
 
@@ -521,6 +607,7 @@ async def api_retry_failed(up_name: str):
 
     video_list = [
         {"bvid": v["bvid"], "title": v["title"], "note_path": v["note_path"]}
+        | {"note_profile": v["note_profile"] or up["note_profile"], "provider_strategy": v["provider_strategy"] or up["provider_strategy"]}
         for v in failed
     ]
 

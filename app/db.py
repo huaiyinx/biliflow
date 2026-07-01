@@ -43,6 +43,8 @@ def init_db():
             processed_videos INTEGER DEFAULT 0,
             failed_videos INTEGER DEFAULT 0,
             shell_notes_created INTEGER DEFAULT 0,
+            note_profile TEXT DEFAULT 'ai_watch_l1',
+            provider_strategy TEXT DEFAULT 'auto_low_cost',
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
 
@@ -57,6 +59,8 @@ def init_db():
             note_path TEXT DEFAULT '',
             note_file TEXT DEFAULT '',
             source TEXT DEFAULT '',
+            note_profile TEXT DEFAULT 'ai_watch_l1',
+            provider_strategy TEXT DEFAULT 'auto_low_cost',
             error_msg TEXT,
             processed_at TEXT,
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
@@ -106,3 +110,13 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_doc_chapters_doc_id ON doc_chapters(doc_id);
         CREATE INDEX IF NOT EXISTS idx_doc_chapters_status ON doc_chapters(status);
         """)
+
+        for table, column, ddl in [
+            ("up_masters", "note_profile", "TEXT DEFAULT 'ai_watch_l1'"),
+            ("up_masters", "provider_strategy", "TEXT DEFAULT 'auto_low_cost'"),
+            ("videos", "note_profile", "TEXT DEFAULT 'ai_watch_l1'"),
+            ("videos", "provider_strategy", "TEXT DEFAULT 'auto_low_cost'"),
+        ]:
+            cols = [r["name"] for r in db.execute(f"PRAGMA table_info({table})").fetchall()]
+            if column not in cols:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")

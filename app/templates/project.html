@@ -39,6 +39,27 @@
 .stat-card .label{font-size:.75rem;color:#94a3b8;margin-top:6px;font-weight:600;letter-spacing:0.5px}
 
 .action-bar{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.settings-card{
+  background:rgba(255,255,255,.015);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:20px;
+  box-shadow:0 10px 30px rgba(0,0,0,.22);
+}
+.settings-card h3{font-size:.95rem;color:#f8fafc;margin:0 0 14px;font-weight:800}
+.settings-field{margin-bottom:12px}
+.settings-field label{display:block;color:#94a3b8;font-size:.74rem;font-weight:700;margin-bottom:7px}
+.settings-select{
+  width:100%;
+  background:rgba(15,23,42,.82);
+  color:#e2e8f0;
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:10px;
+  padding:10px 12px;
+  font-size:.82rem;
+  font-weight:650;
+}
+.settings-help{color:#64748b;font-size:.72rem;line-height:1.5;margin:8px 0 12px}
 .video-list-container{
   padding: 10px 0;
 }
@@ -143,6 +164,28 @@
       <div class="stat-card"><div class="num" style="color:#fbbf24">{{ up.total_videos - up.processed_videos - up.failed_videos }}</div><div class="label">⏳ 待处理</div></div>
       <div class="stat-card"><div class="num" style="color:#f87171">{{ up.failed_videos }}</div><div class="label">❌ 失败</div></div>
     </div>
+
+    <div class="settings-card">
+      <h3>AI看策略</h3>
+      <div class="settings-field">
+        <label>处理档位</label>
+        <select id="noteProfileSelect" class="settings-select">
+          {% for value, label in note_profiles.items() %}
+          <option value="{{ value }}" {% if up.note_profile == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="settings-field">
+        <label>平台接力</label>
+        <select id="providerStrategySelect" class="settings-select">
+          {% for value, label in provider_strategies.items() %}
+          <option value="{{ value }}" {% if up.provider_strategy == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="settings-help">默认推荐 Level 1 + 自动低成本。保存后会同步到待处理和失败视频，已完成笔记不会被强制覆盖。</div>
+      <button class="btn btn-secondary" style="width:100%" onclick="saveAiWatchSettings('{{ up.name }}')">保存策略</button>
+    </div>
     
     <div class="action-bar">
       <a href="/up/{{ up.name }}/dashboard" class="btn btn-primary">📊 实时看板</a>
@@ -180,6 +223,7 @@
         </span>
         <span class="v-title" title="{{ v.title }}">{{ v.title }}</span>
         <span class="v-meta">{{ v.duration }} · {{ v.play_count }}播放</span>
+        {% if v.note_profile %}<span style="color:#a78bfa;font-size:.7rem;font-weight:700;margin-left:4px">{{ note_profiles.get(v.note_profile, v.note_profile) }}</span>{% endif %}
         <span class="tag
           {% if v.status == 'done' or v.status == 'ok' %}tag-done{% elif v.status == 'fail' or v.status == 'failed' %}tag-fail{% elif v.status == 'processing' %}tag-processing{% else %}tag-pending{% endif %}
         ">{{ v.status or 'pending' }}</span>
@@ -205,6 +249,19 @@
 {% block extra_scripts %}
 <script>
 function showStatus(msg){document.getElementById('statusBar').textContent=msg}
+async function saveAiWatchSettings(name){
+  showStatus('保存 AI看策略...');
+  const fd=new FormData();
+  fd.append('note_profile',document.getElementById('noteProfileSelect').value);
+  fd.append('provider_strategy',document.getElementById('providerStrategySelect').value);
+  fd.append('apply_pending','1');
+  try{
+    const r=await fetch(`/api/up/${name}/settings`,{method:'POST',body:fd});
+    const d=await r.json();
+    showStatus(r.ok?`已保存，更新 ${d.pending_updated} 个待处理/失败视频`:'保存失败');
+    if(r.ok)setTimeout(()=>location.reload(),1200);
+  }catch(e){showStatus('保存失败')}
+}
 async function triggerProcess(name){
   showStatus('⏳ 启动处理...');
   try{const r=await fetch(`/api/up/${name}/process`,{method:'POST'});const d=await r.json();
