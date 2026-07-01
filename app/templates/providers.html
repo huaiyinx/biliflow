@@ -27,6 +27,10 @@
 .field textarea{min-height:76px;resize:vertical}
 .test-actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .result-box{margin-top:14px;border-radius:14px;background:rgba(15,23,42,.7);border:1px solid rgba(148,163,184,.14);padding:14px;color:#dbeafe;white-space:pre-wrap;line-height:1.65;min-height:54px}
+.frame-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+.frame-card{border:1px solid rgba(148,163,184,.14);border-radius:12px;background:rgba(15,23,42,.62);overflow:hidden}
+.frame-card img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#020617}
+.frame-card .meta{padding:8px 10px;color:#94a3b8;font-size:.72rem;font-weight:700}
 .muted{color:#94a3b8;font-size:.78rem}
 @media(max-width:800px){.policy-grid{grid-template-columns:1fr}.provider-table{display:block;overflow-x:auto;white-space:nowrap}}
 @media(max-width:800px){.test-grid{grid-template-columns:1fr}}
@@ -120,6 +124,44 @@
     </div>
     <div class="result-box" id="test-result">结果会显示在这里。</div>
   </div>
+
+  <div class="test-panel">
+    <div class="test-title">本地视频抽帧试跑</div>
+    <p class="hint">选择一个本地视频，浏览器会在本机抽取少量关键帧，再逐张上传图片给云端 OCR/视觉模型。视频文件本身不会上传到 VPS。</p>
+    <div class="test-grid">
+      <div class="field">
+        <label for="video-task">任务</label>
+        <select id="video-task">
+          <option value="ocr">OCR</option>
+          <option value="vision">视觉理解</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="video-file">本地视频</label>
+        <input id="video-file" type="file" accept="video/*">
+      </div>
+      <div class="field">
+        <label for="frame-count">抽帧数量</label>
+        <select id="frame-count">
+          <option value="5">5 张</option>
+          <option value="8">8 张</option>
+          <option value="12">12 张</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="video-prompt">提示词</label>
+        <textarea id="video-prompt" placeholder="留空使用默认课程截图理解模板"></textarea>
+      </div>
+    </div>
+    <div class="test-actions">
+      <button class="btn" type="button" id="run-video-frames">抽帧并试跑</button>
+      <span class="muted" id="video-status">等待选择本地视频</span>
+    </div>
+    <div class="frame-strip" id="frame-strip"></div>
+    <div class="result-box" id="video-result">多帧结果会显示在这里。</div>
+    <video id="frame-video" muted playsinline style="display:none"></video>
+    <canvas id="frame-canvas" style="display:none"></canvas>
+  </div>
 </div>
 <script>
 const runBtn = document.getElementById("run-provider-test");
@@ -173,6 +215,146 @@ runBtn.addEventListener("click", async () => {
     resultEl.textContent = String(err);
   } finally {
     runBtn.disabled = false;
+  }
+});
+
+const videoBtn = document.getElementById("run-video-frames");
+const videoStatusEl = document.getElementById("video-status");
+const videoResultEl = document.getElementById("video-result");
+const frameStripEl = document.getElementById("frame-strip");
+const hiddenVideo = document.getElementById("frame-video");
+const frameCanvas = document.getElementById("frame-canvas");
+
+function waitForEvent(target, eventName) {
+  return new Promise((resolve, reject) => {
+    const onEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("视频读取失败"));
+    };
+    const cleanup = () => {
+      target.removeEventListener(eventName, onEvent);
+      target.removeEventListener("error", onError);
+    };
+    target.addEventListener(eventName, onEvent, {once: true});
+    target.addEventListener("error", onError, {once: true});
+  });
+}
+
+async function seekVideo(seconds) {
+  hiddenVideo.currentTime = Math.min(Math.max(seconds, 0), Math.max(hiddenVideo.duration - 0.1, 0));
+  await waitForEvent(hiddenVideo, "seeked");
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.72);
+  });
+}
+
+function formatTime(seconds) {
+  const mm = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const ss = Math.floor(seconds % 60).toString().padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+async function extractFrames(file, count) {
+  const objectUrl = URL.createObjectURL(file);
+  hiddenVideo.src = objectUrl;
+  hiddenVideo.load();
+  await waitForEvent(hiddenVideo, "loadedmetadata");
+
+  const duration = Number.isFinite(hiddenVideo.duration) ? hiddenVideo.duration : 0;
+  const width = Math.min(hiddenVideo.videoWidth || 1280, 1280);
+  const height = Math.round(width * ((hiddenVideo.videoHeight || 720) / (hiddenVideo.videoWidth || 1280)));
+  frameCanvas.width = width;
+  frameCanvas.height = height;
+
+  const frames = [];
+  for (let i = 0; i < count; i += 1) {
+    const t = duration > 0 ? ((i + 1) / (count + 1)) * duration : i;
+    videoStatusEl.textContent = `正在抽取第 ${i + 1}/${count} 帧...`;
+    await seekVideo(t);
+    const ctx = frameCanvas.getContext("2d");
+    ctx.drawImage(hiddenVideo, 0, 0, width, height);
+    const blob = await canvasToBlob(frameCanvas);
+    if (blob) {
+      frames.push({
+        index: i + 1,
+        timestamp: t,
+        blob,
+        previewUrl: URL.createObjectURL(blob),
+      });
+    }
+  }
+  URL.revokeObjectURL(objectUrl);
+  hiddenVideo.removeAttribute("src");
+  hiddenVideo.load();
+  return frames;
+}
+
+async function uploadFrame(frame, task, prompt) {
+  const form = new FormData();
+  form.append("task", task);
+  form.append("prompt", prompt);
+  form.append("file", frame.blob, `frame-${frame.index}-${Math.round(frame.timestamp)}s.jpg`);
+  const res = await fetch("/api/providers/test-file", {
+    method: "POST",
+    body: form
+  });
+  const data = await res.json();
+  if (!res.ok || data.status !== "ok") {
+    throw new Error(JSON.stringify(data));
+  }
+  return data;
+}
+
+videoBtn.addEventListener("click", async () => {
+  const file = document.getElementById("video-file").files[0];
+  const task = document.getElementById("video-task").value;
+  const prompt = document.getElementById("video-prompt").value.trim();
+  const count = Math.min(parseInt(document.getElementById("frame-count").value, 10) || 5, 12);
+  if (!file) {
+    videoStatusEl.textContent = "请先选择本地视频";
+    return;
+  }
+
+  videoBtn.disabled = true;
+  frameStripEl.innerHTML = "";
+  videoResultEl.textContent = "";
+  try {
+    const frames = await extractFrames(file, count);
+    if (!frames.length) {
+      videoStatusEl.textContent = "没有抽到可用画面";
+      return;
+    }
+    frameStripEl.innerHTML = frames.map((frame) => `
+      <div class="frame-card">
+        <img src="${frame.previewUrl}" alt="frame ${frame.index}">
+        <div class="meta">#${frame.index} · ${formatTime(frame.timestamp)}</div>
+      </div>
+    `).join("");
+
+    const outputs = [];
+    for (const frame of frames) {
+      videoStatusEl.textContent = `正在识别第 ${frame.index}/${frames.length} 帧...`;
+      const data = await uploadFrame(frame, task, prompt);
+      outputs.push([
+        `## Frame ${frame.index} · ${formatTime(frame.timestamp)}`,
+        `Provider: ${data.provider} / ${data.model} / ${data.elapsed_ms}ms`,
+        data.content
+      ].join("\n"));
+      videoResultEl.textContent = outputs.join("\n\n---\n\n");
+    }
+    videoStatusEl.textContent = `完成 ${outputs.length} 帧`;
+  } catch (err) {
+    videoStatusEl.textContent = "抽帧或识别失败";
+    videoResultEl.textContent = String(err);
+  } finally {
+    videoBtn.disabled = false;
   }
 });
 </script>
