@@ -39,11 +39,13 @@ class AIWatchProviderError(RuntimeError):
         self.attempts = attempts or []
 
 
-def _assert_public_image_url(image_url: str) -> str:
+def _assert_image_source(image_url: str) -> str:
     value = (image_url or "").strip()
+    if value.startswith("data:image/") and ";base64," in value[:80]:
+        return value
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("image_url 必须是可公开访问的 http/https 图片地址")
+        raise ValueError("image_url 必须是 http/https 图片地址或 data:image base64")
     return value
 
 
@@ -123,7 +125,7 @@ def run_ai_watch_image(
     prompt: str | None = None,
 ) -> dict[str, Any]:
     """Try the recommended cloud providers for an OCR/vision image task."""
-    clean_url = _assert_public_image_url(image_url)
+    clean_url = _assert_image_source(image_url)
     task = task if task in {"ocr", "vision"} else "vision"
     final_prompt = (prompt or "").strip() or DEFAULT_PROMPTS[task]
     attempts: list[dict[str, Any]] = []

@@ -7,6 +7,7 @@ import json
 import time
 import threading
 import requests
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +55,14 @@ PROVIDER_STRATEGIES = {
     "gemini_youtube_first": "YouTube Gemini优先",
     "baidu_qianfan_first": "百度千帆优先",
     "manual": "手动/暂不自动选择",
+}
+
+AI_WATCH_MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+AI_WATCH_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
 }
 
 
@@ -289,6 +298,50 @@ async def api_providers_test(req: ProviderTestRequest):
         )
     except Exception as e:
         raise HTTPException(500, f"provider test failed: {e}")
+
+
+@app.post("/api/providers/test-file")
+async def api_providers_test_file(
+    task: str = Form("ocr"),
+    prompt: str | None = Form(None),
+    file: UploadFile = File(...),
+):
+    """Run cloud OCR/vision on a small uploaded image without storing it."""
+    task = task if task in {"ocr", "vision"} else "vision"
+    content_type = (file.content_type or "").lower()
+    if content_type not in AI_WATCH_IMAGE_TYPES:
+        raise HTTPException(400, "只支持 jpg/png/webp/gif 图片")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "图片为空")
+    if len(data) > AI_WATCH_MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "图片不能超过 5MB")
+
+    image_data_url = (
+        f"data:{content_type};base64,"
+        f"{base64.b64encode(data).decode('ascii')}"
+    )
+    try:
+        result = run_ai_watch_image(
+            task=task,
+            image_url=image_data_url,
+            prompt=prompt,
+        )
+        result["source"] = "upload"
+        result["filename"] = file.filename
+        return result
+    except AIWatchProviderError as e:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "status": "failed",
+                "message": str(e),
+                "attempts": e.attempts,
+            },
+        )
+    except Exception as e:
+        raise HTTPException(500, f"provider file test failed: {e}")
 
 
 @app.post("/api/up")

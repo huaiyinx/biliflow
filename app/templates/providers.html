@@ -23,6 +23,7 @@
 .test-grid{display:grid;grid-template-columns:140px 1fr;gap:12px}
 .field label{display:block;color:#94a3b8;font-size:.74rem;font-weight:800;margin-bottom:7px}
 .field input,.field select,.field textarea{width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.2);border-radius:12px;background:rgba(15,23,42,.76);color:#e2e8f0;padding:11px 12px;font-size:.88rem}
+.field input[type=file]{padding:9px 12px}
 .field textarea{min-height:76px;resize:vertical}
 .test-actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .result-box{margin-top:14px;border-radius:14px;background:rgba(15,23,42,.7);border:1px solid rgba(148,163,184,.14);padding:14px;color:#dbeafe;white-space:pre-wrap;line-height:1.65;min-height:54px}
@@ -89,7 +90,7 @@
 
   <div class="test-panel">
     <div class="test-title">云端 AI看试跑</div>
-    <p class="hint">贴一张可公开访问的课程截图 URL，BiliFlow 会按当前可用 provider 优先级尝试 OCR 或视觉理解。这里不下载视频，只验证云端模型链路。</p>
+    <p class="hint">贴一张可公开访问的课程截图 URL，或直接上传一张本地截图。BiliFlow 会按当前可用 provider 优先级尝试 OCR 或视觉理解。这里不下载视频，只验证少量截图的云端模型链路。</p>
     <div class="test-grid">
       <div class="field">
         <label for="test-task">任务</label>
@@ -98,6 +99,11 @@
           <option value="vision">视觉理解</option>
         </select>
       </div>
+      <div class="field">
+        <label for="test-image-file">本地图片</label>
+        <input id="test-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+      </div>
+      <div></div>
       <div class="field">
         <label for="test-image-url">图片 URL</label>
         <input id="test-image-url" type="url" placeholder="https://example.com/course-screenshot.png">
@@ -122,21 +128,38 @@ const resultEl = document.getElementById("test-result");
 
 runBtn.addEventListener("click", async () => {
   const imageUrl = document.getElementById("test-image-url").value.trim();
+  const imageFile = document.getElementById("test-image-file").files[0];
   const task = document.getElementById("test-task").value;
   const prompt = document.getElementById("test-prompt").value.trim();
-  if (!imageUrl) {
-    statusEl.textContent = "请先输入图片 URL";
+  if (!imageUrl && !imageFile) {
+    statusEl.textContent = "请先上传图片或输入图片 URL";
+    return;
+  }
+  if (imageFile && imageFile.size > 5 * 1024 * 1024) {
+    statusEl.textContent = "图片不能超过 5MB";
     return;
   }
   runBtn.disabled = true;
   statusEl.textContent = "正在调用云端模型...";
   resultEl.textContent = "";
   try {
-    const res = await fetch("/api/providers/test", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({task, image_url: imageUrl, prompt})
-    });
+    let res;
+    if (imageFile) {
+      const form = new FormData();
+      form.append("task", task);
+      form.append("prompt", prompt);
+      form.append("file", imageFile);
+      res = await fetch("/api/providers/test-file", {
+        method: "POST",
+        body: form
+      });
+    } else {
+      res = await fetch("/api/providers/test", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({task, image_url: imageUrl, prompt})
+      });
+    }
     const data = await res.json();
     if (!res.ok || data.status !== "ok") {
       statusEl.textContent = "试跑失败";
