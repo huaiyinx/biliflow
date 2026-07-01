@@ -21,6 +21,7 @@ import subprocess
 
 from config import config
 from db import get_db, init_db
+from provider_registry import get_provider_status, recommended_models
 from bili_api import (
     extract_bvid_from_url,
     extract_uid_from_url,
@@ -113,6 +114,19 @@ async def add_page(request: Request):
         "domain": config.DOMAIN,
         "note_profiles": NOTE_PROFILES,
         "provider_strategies": PROVIDER_STRATEGIES,
+    })
+
+
+@app.get("/providers", response_class=HTMLResponse)
+async def providers_page(request: Request):
+    """AI Watch provider pool and budget guard page."""
+    providers = get_provider_status()
+    return templates.TemplateResponse("providers.html", {
+        "request": request,
+        "domain": config.DOMAIN,
+        "providers": providers,
+        "budget_cny": config.AI_WATCH_MAX_VISUAL_COST_CNY,
+        "require_free_first": config.AI_WATCH_REQUIRE_FREE_FIRST,
     })
 
 
@@ -228,6 +242,21 @@ async def api_list_ups():
             "SELECT * FROM up_masters ORDER BY created_at DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@app.get("/api/providers")
+async def api_providers():
+    """Return provider pool status without exposing API keys."""
+    return {
+        "budget_cny": config.AI_WATCH_MAX_VISUAL_COST_CNY,
+        "require_free_first": config.AI_WATCH_REQUIRE_FREE_FIRST,
+        "providers": get_provider_status(),
+        "recommended": {
+            "ocr": recommended_models("ocr"),
+            "vision": recommended_models("vision"),
+            "youtube_video": recommended_models("youtube_video"),
+        },
+    }
 
 
 @app.post("/api/up")

@@ -14,6 +14,15 @@ class Config:
     SF_KEY: str = os.getenv("SILICONFLOW_KEY", "")
     SF_BASE: str = os.getenv("SILICONFLOW_BASE", "https://api.siliconflow.cn/v1")
 
+    # Cloud visual/OCR providers
+    OPENROUTER_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    OPENROUTER_BASE: str = os.getenv("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
+    SILICONFLOW_VISUAL_KEY: str = os.getenv("SILICONFLOW_VISUAL_KEY", SF_KEY)
+    AI_WATCH_MAX_VISUAL_COST_CNY: float = float(os.getenv("AI_WATCH_MAX_VISUAL_COST_CNY", "0.20"))
+    AI_WATCH_REQUIRE_FREE_FIRST: bool = os.getenv("AI_WATCH_REQUIRE_FREE_FIRST", "1").lower() not in {
+        "0", "false", "no", "off"
+    }
+
     # Gemini (via NewAPI)
     GEMINI_KEY: str = os.getenv("GEMINI_KEY", "")
     GEMINI_BASE: str = os.getenv("GEMINI_BASE", "https://api.19991023.xyz/v1")

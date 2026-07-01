@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}AI看 Provider{% endblock %}
+{% block extra_head %}
+<style>
+.providers-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap}
+.providers-head h1{font-size:1.55rem;color:#f8fafc;margin-bottom:8px;font-weight:850}
+.hint{color:#94a3b8;font-size:.86rem;line-height:1.7;max-width:760px}
+.policy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:24px 0}
+.policy-box{background:rgba(255,255,255,.018);border-radius:16px;padding:18px}
+.policy-box .label{font-size:.76rem;color:#94a3b8;font-weight:700;margin-bottom:8px}
+.policy-box .value{font-size:1.35rem;color:#c084fc;font-weight:850}
+.provider-table{width:100%;border-collapse:collapse;font-size:.84rem}
+.provider-table th{text-align:left;color:#94a3b8;font-size:.72rem;letter-spacing:.5px;padding:12px 10px;border-bottom:1px solid rgba(148,163,184,.12)}
+.provider-table td{padding:14px 10px;border-bottom:1px solid rgba(148,163,184,.08);vertical-align:top;color:#dbeafe}
+.model{font-family:monospace;color:#e9d5ff;font-weight:700}
+.pill{display:inline-block;border-radius:999px;padding:4px 9px;font-size:.7rem;font-weight:800}
+.pill-ok{background:rgba(52,211,153,.1);color:#34d399}
+.pill-warn{background:rgba(251,191,36,.1);color:#fbbf24}
+.pill-off{background:rgba(248,113,113,.1);color:#f87171}
+.notes{color:#94a3b8;line-height:1.55;max-width:420px}
+@media(max-width:800px){.policy-grid{grid-template-columns:1fr}.provider-table{display:block;overflow-x:auto;white-space:nowrap}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="providers-head">
+    <div>
+      <h1>AI看 Provider 池</h1>
+      <p class="hint">VPS 只做调度、预算保护和结果记录，不下载视频、不做本地 OCR。限免模型会被标记为风险项，后续任务执行前按价格/预算自动跳过或降级。</p>
+    </div>
+    <a class="btn btn-secondary" href="/api/providers" target="_blank">查看 JSON</a>
+  </div>
+
+  <div class="policy-grid">
+    <div class="policy-box">
+      <div class="label">单视频视觉补强预算</div>
+      <div class="value">¥{{ "%.2f"|format(budget_cny) }}</div>
+    </div>
+    <div class="policy-box">
+      <div class="label">免费优先策略</div>
+      <div class="value">{{ "开启" if require_free_first else "关闭" }}</div>
+    </div>
+  </div>
+
+  <table class="provider-table">
+    <thead>
+      <tr>
+        <th>优先级</th>
+        <th>任务</th>
+        <th>Provider</th>
+        <th>模型</th>
+        <th>Key</th>
+        <th>状态</th>
+        <th>风险</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in providers %}
+      <tr>
+        <td>{{ p.priority }}</td>
+        <td>{{ p.task }}</td>
+        <td>{{ p.provider }}</td>
+        <td><span class="model">{{ p.model }}</span></td>
+        <td>
+          {% if p.key_present %}<span class="pill pill-ok">已配置</span>{% else %}<span class="pill pill-off">缺失</span>{% endif %}
+        </td>
+        <td>
+          {% if p.enabled_by_policy %}<span class="pill pill-ok">可用</span>{% else %}<span class="pill pill-off">跳过</span>{% endif %}
+        </td>
+        <td>
+          {% if p.limited_free %}<span class="pill pill-warn">限免</span>{% else %}<span class="pill pill-ok">低风险</span>{% endif %}
+        </td>
+        <td class="notes">{{ p.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
