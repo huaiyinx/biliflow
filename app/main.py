@@ -22,6 +22,7 @@ import subprocess
 
 from config import config
 from db import get_db, init_db
+from ai_watch_context import build_visual_context
 from ai_watch_providers import AIWatchProviderError, run_ai_watch_image
 from provider_registry import get_provider_status, recommended_models
 from bili_api import (
@@ -80,6 +81,18 @@ class ProviderTestRequest(BaseModel):
     task: str = "ocr"
     image_url: str
     prompt: str | None = None
+
+
+class VisualFrameResult(BaseModel):
+    index: int
+    timestamp: float = 0
+    provider: str | None = None
+    model: str | None = None
+    content: str
+
+
+class VisualContextRequest(BaseModel):
+    frames: list[VisualFrameResult]
 
 # 静态文件 + 模板
 os.makedirs("/app/static", exist_ok=True)
@@ -342,6 +355,16 @@ async def api_providers_test_file(
         )
     except Exception as e:
         raise HTTPException(500, f"provider file test failed: {e}")
+
+
+@app.post("/api/providers/visual-context")
+async def api_providers_visual_context(req: VisualContextRequest):
+    """Compress multiple frame OCR/vision outputs into Markdown visual_context."""
+    if not req.frames:
+        raise HTTPException(400, "frames 不能为空")
+    if len(req.frames) > 12:
+        raise HTTPException(400, "一次最多合并 12 帧")
+    return build_visual_context([frame.model_dump() for frame in req.frames])
 
 
 @app.post("/api/up")

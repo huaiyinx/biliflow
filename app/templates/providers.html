@@ -312,6 +312,19 @@ async function uploadFrame(frame, task, prompt) {
   return data;
 }
 
+async function buildVisualContext(frameResults) {
+  const res = await fetch("/api/providers/visual-context", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({frames: frameResults})
+  });
+  const data = await res.json();
+  if (!res.ok || !data.visual_context) {
+    throw new Error(JSON.stringify(data));
+  }
+  return data;
+}
+
 videoBtn.addEventListener("click", async () => {
   const file = document.getElementById("video-file").files[0];
   const task = document.getElementById("video-task").value;
@@ -339,9 +352,17 @@ videoBtn.addEventListener("click", async () => {
     `).join("");
 
     const outputs = [];
+    const frameResults = [];
     for (const frame of frames) {
       videoStatusEl.textContent = `正在识别第 ${frame.index}/${frames.length} 帧...`;
       const data = await uploadFrame(frame, task, prompt);
+      frameResults.push({
+        index: frame.index,
+        timestamp: frame.timestamp,
+        provider: data.provider,
+        model: data.model,
+        content: data.content
+      });
       outputs.push([
         `## Frame ${frame.index} · ${formatTime(frame.timestamp)}`,
         `Provider: ${data.provider} / ${data.model} / ${data.elapsed_ms}ms`,
@@ -349,7 +370,17 @@ videoBtn.addEventListener("click", async () => {
       ].join("\n"));
       videoResultEl.textContent = outputs.join("\n\n---\n\n");
     }
-    videoStatusEl.textContent = `完成 ${outputs.length} 帧`;
+    videoStatusEl.textContent = "正在合并 visual_context...";
+    const visualContext = await buildVisualContext(frameResults);
+    videoResultEl.textContent = [
+      visualContext.visual_context,
+      "",
+      "---",
+      "",
+      "## 原始逐帧结果",
+      outputs.join("\n\n---\n\n")
+    ].join("\n");
+    videoStatusEl.textContent = `完成 ${outputs.length} 帧 · ${visualContext.source}`;
   } catch (err) {
     videoStatusEl.textContent = "抽帧或识别失败";
     videoResultEl.textContent = String(err);
