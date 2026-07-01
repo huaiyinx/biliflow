@@ -93,6 +93,8 @@ class VisualFrameResult(BaseModel):
 
 class VisualContextRequest(BaseModel):
     frames: list[VisualFrameResult]
+    bvid: str | None = None
+    save: bool = False
 
 # 静态文件 + 模板
 os.makedirs("/app/static", exist_ok=True)
@@ -364,7 +366,43 @@ async def api_providers_visual_context(req: VisualContextRequest):
         raise HTTPException(400, "frames 不能为空")
     if len(req.frames) > 12:
         raise HTTPException(400, "一次最多合并 12 帧")
-    return build_visual_context([frame.model_dump() for frame in req.frames])
+    bvid = (req.bvid or "").strip()
+    video_id = None
+    if req.save and bvid:
+        with get_db() as db:
+            row = db.execute(
+                "SELECT id FROM videos WHERE bvid = ? ORDER BY id DESC LIMIT 1",
+                (bvid,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"未找到视频 {bvid}")
+            video_id = row["id"]
+    frames = [
+        frame.model_dump() if hasattr(frame, "model_dump") else frame.dict()
+        for frame in req.frames
+    ]
+    result = build_visual_context(frames)
+    if video_id and result.get("visual_context"):
+        with get_db() as db:
+            db.execute(
+                """
+                UPDATE videos
+                   SET visual_context = ?,
+                       visual_context_source = ?,
+                       visual_context_frame_count = ?,
+                       visual_context_updated_at = datetime('now','localtime')
+                 WHERE id = ?
+                """,
+                (
+                    result["visual_context"],
+                    result.get("source", ""),
+                    result.get("frame_count", 0),
+                    video_id,
+                ),
+            )
+        result["saved"] = True
+        result["bvid"] = bvid
+    return result
 
 
 @app.post("/api/up")
@@ -412,7 +450,7 @@ async def api_add_up(
                 up_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
             existing_video = db.execute(
-                "SELECT id, status, title, note_path, note_file, note_profile, provider_strategy FROM videos WHERE up_id = ? AND bvid = ?",
+                "SELECT id, status, title, note_path, note_file, note_profile, provider_strategy, visual_context, visual_context_source FROM videos WHERE up_id = ? AND bvid = ?",
                 (up_id, bvid),
             ).fetchone()
 
@@ -424,6 +462,8 @@ async def api_add_up(
                 "note_file": existing_video["note_file"],
                 "note_profile": existing_video["note_profile"] or note_profile,
                 "provider_strategy": existing_video["provider_strategy"] or provider_strategy,
+                "visual_context": existing_video["visual_context"] or "",
+                "visual_context_source": existing_video["visual_context_source"] or "",
             }]
         else:
             shell_notes = create_shell_notes_batch(name, uid, up_id, [video])
@@ -604,7 +644,7 @@ async def api_process_up(up_name: str):
 
         # 获取所有 pending 视频
         videos = db.execute(
-            "SELECT bvid, title, note_path, note_file, note_profile, provider_strategy FROM videos WHERE up_id = ? AND status = 'pending'",
+            "SELECT bvid, title, note_path, note_file, note_profile, provider_strategy, visual_context, visual_context_source FROM videos WHERE up_id = ? AND status = 'pending'",
             (up["id"],),
         ).fetchall()
 
@@ -616,7 +656,12 @@ async def api_process_up(up_name: str):
 
     video_list = [
         {"bvid": v["bvid"], "title": v["title"], "note_path": v["note_path"]}
-        | {"note_profile": v["note_profile"] or up["note_profile"], "provider_strategy": v["provider_strategy"] or up["provider_strategy"]}
+        | {
+            "note_profile": v["note_profile"] or up["note_profile"],
+            "provider_strategy": v["provider_strategy"] or up["provider_strategy"],
+            "visual_context": v["visual_context"] or "",
+            "visual_context_source": v["visual_context_source"] or "",
+        }
         for v in videos
     ]
 
@@ -732,7 +777,7 @@ async def api_retry_failed(up_name: str):
             raise HTTPException(404, "UP主不存在")
 
         failed = db.execute(
-            "SELECT bvid, title, note_path, note_profile, provider_strategy FROM videos WHERE up_id = ? AND status IN ('fail', 'failed')",
+            "SELECT bvid, title, note_path, note_profile, provider_strategy, visual_context, visual_context_source FROM videos WHERE up_id = ? AND status IN ('fail', 'failed')",
             (up["id"],),
         ).fetchall()
 
@@ -744,7 +789,12 @@ async def api_retry_failed(up_name: str):
 
     video_list = [
         {"bvid": v["bvid"], "title": v["title"], "note_path": v["note_path"]}
-        | {"note_profile": v["note_profile"] or up["note_profile"], "provider_strategy": v["provider_strategy"] or up["provider_strategy"]}
+        | {
+            "note_profile": v["note_profile"] or up["note_profile"],
+            "provider_strategy": v["provider_strategy"] or up["provider_strategy"],
+            "visual_context": v["visual_context"] or "",
+            "visual_context_source": v["visual_context_source"] or "",
+        }
         for v in failed
     ]
 

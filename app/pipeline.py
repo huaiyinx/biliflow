@@ -108,17 +108,20 @@ AI_WATCH_PROFILE_HINTS = {
 
 AI_WATCH_PROMPT = """# 角色与任务
 你是一个类似百度网盘“AI看”的视频学习助手。
-我会给你一段中文视频字幕/转写文本。请优先生成播放器侧栏式的学习导航，而不是长篇文章。
+我会给你一段中文视频字幕/转写文本，可能还会提供关键帧 OCR/视觉上下文。请优先生成播放器侧栏式的学习导航，而不是长篇文章。
 
 # 当前处理策略
 - 处理档位：{note_profile}
 - 平台接力策略：{provider_strategy}
 - 档位说明：{profile_hint}
 
+# 关键帧 OCR/视觉上下文
+{visual_context_block}
+
 # 输出要求
 1. 先给“AI看”轻量层，帮助用户快速决定怎么看、看哪里、哪些可以跳过。
 2. 必须保留时间戳线索；如果原文时间戳不足，按内容顺序给近似章节。
-3. 不要编造画面信息。没有截图/OCR/视觉输入时，只能说“根据字幕判断”。
+3. 不要编造画面信息。没有截图/OCR/视觉输入时，只能说“根据字幕判断”；如果提供了 visual_context，可以明确引用其中的时间点和屏幕文字。
 4. 再给“AI笔记”层，包括要点、行动项、练习题、脑图大纲。
 5. 最后给“深度理解”层，保持简洁，不要喧宾夺主。
 
@@ -486,11 +489,21 @@ def existing_note_context(note_path: str) -> str | None:
     return content if len(content) > 300 else None
 
 
+def format_visual_context_block(visual_context: str | None, visual_context_source: str = "") -> str:
+    value = (visual_context or "").strip()
+    if not value:
+        return "未提供。请不要编造画面细节，只能基于字幕判断。"
+    source = f"\n来源：{visual_context_source}" if visual_context_source else ""
+    return f"{value[:5000]}{source}"
+
+
 def process_one_video(
     bvid: str, title: str, note_path: str,
     audio_dir: str, progress: ProgressTracker,
     note_profile: str = "ai_watch_l1",
     provider_strategy: str = "auto_low_cost",
+    visual_context: str = "",
+    visual_context_source: str = "",
 ) -> tuple[str, str]:
     note_context = existing_note_context(note_path)
     if os.path.exists(note_path):
@@ -501,7 +514,9 @@ def process_one_video(
             "学习目标与核心问题", "私人导师讲解",
             "核心知识卡", "独立思考与边界", "回看与复习入口",
         ]
-        if all(s in existing for s in required_sections):
+        if all(s in existing for s in required_sections) and (
+            not visual_context or "视觉上下文备份" in existing
+        ):
             return "ok", "cached"
 
     transcript = ""
@@ -578,6 +593,7 @@ def process_one_video(
         note_profile=note_profile,
         provider_strategy=provider_strategy,
         profile_hint=AI_WATCH_PROFILE_HINTS.get(note_profile, AI_WATCH_PROFILE_HINTS["ai_watch_l1"]),
+        visual_context_block=format_visual_context_block(visual_context, visual_context_source),
     )
     result = call_llm(prompt, 3600)
     if not result:
@@ -608,6 +624,7 @@ def process_one_video(
             f'source: "{source}"',
             f'note_profile: "{note_profile}"',
             f'provider_strategy: "{provider_strategy}"',
+            f"has_visual_context: {str(bool(visual_context)).lower()}",
             "---",
         ]
     else:
@@ -619,6 +636,7 @@ def process_one_video(
         has_source = False
         has_note_profile = False
         has_provider_strategy = False
+        has_visual_context = False
         for line in fm_lines:
             if line.startswith("title:"):
                 new_fm.append(f'title: "{title}"')
@@ -638,6 +656,9 @@ def process_one_video(
             elif line.startswith("provider_strategy:"):
                 new_fm.append(f'provider_strategy: "{provider_strategy}"')
                 has_provider_strategy = True
+            elif line.startswith("has_visual_context:"):
+                new_fm.append(f"has_visual_context: {str(bool(visual_context)).lower()}")
+                has_visual_context = True
             elif line == "---" and len(new_fm) > 0:
                 if not has_title:
                     new_fm.append(f'title: "{title}"')
@@ -657,6 +678,9 @@ def process_one_video(
                 if not has_provider_strategy:
                     new_fm.append(f'provider_strategy: "{provider_strategy}"')
                     has_provider_strategy = True
+                if not has_visual_context:
+                    new_fm.append(f"has_visual_context: {str(bool(visual_context)).lower()}")
+                    has_visual_context = True
                 new_fm.append(line)
             else:
                 new_fm.append(line)
@@ -672,6 +696,11 @@ def process_one_video(
     body_parts.append("")
     body_parts.append(clean)
     body_parts.append("")
+    if visual_context:
+        body_parts.append("## 🎞️ 视觉上下文备份")
+        body_parts.append("")
+        body_parts.append(visual_context.strip())
+        body_parts.append("")
     body_parts.append("---")
     body_parts.append("")
     if source == "NOTE":
@@ -706,6 +735,8 @@ def process_up_videos(up_name: str, video_list: list[dict], vault_dir: str,
             audio_dir, progress,
             v.get("note_profile") or "ai_watch_l1",
             v.get("provider_strategy") or "auto_low_cost",
+            v.get("visual_context") or "",
+            v.get("visual_context_source") or "",
         )
 
         if status == "ok":

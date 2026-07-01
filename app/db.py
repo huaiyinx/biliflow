@@ -61,6 +61,10 @@ def init_db():
             source TEXT DEFAULT '',
             note_profile TEXT DEFAULT 'ai_watch_l1',
             provider_strategy TEXT DEFAULT 'auto_low_cost',
+            visual_context TEXT DEFAULT '',
+            visual_context_source TEXT DEFAULT '',
+            visual_context_frame_count INTEGER DEFAULT 0,
+            visual_context_updated_at TEXT,
             error_msg TEXT,
             processed_at TEXT,
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
@@ -116,6 +120,10 @@ def init_db():
             ("up_masters", "provider_strategy", "TEXT DEFAULT 'auto_low_cost'"),
             ("videos", "note_profile", "TEXT DEFAULT 'ai_watch_l1'"),
             ("videos", "provider_strategy", "TEXT DEFAULT 'auto_low_cost'"),
+            ("videos", "visual_context", "TEXT DEFAULT ''"),
+            ("videos", "visual_context_source", "TEXT DEFAULT ''"),
+            ("videos", "visual_context_frame_count", "INTEGER DEFAULT 0"),
+            ("videos", "visual_context_updated_at", "TEXT"),
         ]:
             cols = [r["name"] for r in db.execute(f"PRAGMA table_info({table})").fetchall()]
             if column not in cols:

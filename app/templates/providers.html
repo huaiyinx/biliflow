@@ -149,6 +149,10 @@
         </select>
       </div>
       <div class="field">
+        <label for="video-bvid">绑定 BV号</label>
+        <input id="video-bvid" type="text" placeholder="可选：BV... 填写后保存到正式任务">
+      </div>
+      <div class="field">
         <label for="video-prompt">提示词</label>
         <textarea id="video-prompt" placeholder="留空使用默认课程截图理解模板"></textarea>
       </div>
@@ -312,11 +316,11 @@ async function uploadFrame(frame, task, prompt) {
   return data;
 }
 
-async function buildVisualContext(frameResults) {
+async function buildVisualContext(frameResults, bvid) {
   const res = await fetch("/api/providers/visual-context", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({frames: frameResults})
+    body: JSON.stringify({frames: frameResults, bvid, save: Boolean(bvid)})
   });
   const data = await res.json();
   if (!res.ok || !data.visual_context) {
@@ -329,6 +333,7 @@ videoBtn.addEventListener("click", async () => {
   const file = document.getElementById("video-file").files[0];
   const task = document.getElementById("video-task").value;
   const prompt = document.getElementById("video-prompt").value.trim();
+  const bvid = document.getElementById("video-bvid").value.trim();
   const count = Math.min(parseInt(document.getElementById("frame-count").value, 10) || 5, 12);
   if (!file) {
     videoStatusEl.textContent = "请先选择本地视频";
@@ -371,7 +376,7 @@ videoBtn.addEventListener("click", async () => {
       videoResultEl.textContent = outputs.join("\n\n---\n\n");
     }
     videoStatusEl.textContent = "正在合并 visual_context...";
-    const visualContext = await buildVisualContext(frameResults);
+    const visualContext = await buildVisualContext(frameResults, bvid);
     videoResultEl.textContent = [
       visualContext.visual_context,
       "",
@@ -380,7 +385,7 @@ videoBtn.addEventListener("click", async () => {
       "## 原始逐帧结果",
       outputs.join("\n\n---\n\n")
     ].join("\n");
-    videoStatusEl.textContent = `完成 ${outputs.length} 帧 · ${visualContext.source}`;
+    videoStatusEl.textContent = `完成 ${outputs.length} 帧 · ${visualContext.source}${visualContext.saved ? " · 已保存" : ""}`;
   } catch (err) {
     videoStatusEl.textContent = "抽帧或识别失败";
     videoResultEl.textContent = String(err);
