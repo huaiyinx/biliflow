@@ -13,7 +13,6 @@ from pathlib import Path
 from config import config
 from bili_api import load_bili_cookie, fetch_subtitle, download_audio as bili_download_audio, download_audio_segments
 from obsidian_sync import write_vault_file
-from visual_context import build_visual_context
 
 
 FULL_PROMPT = """# 角色与核心任务
@@ -115,9 +114,6 @@ AI_WATCH_PROMPT = """# 角色与任务
 - 处理档位：{note_profile}
 - 平台接力策略：{provider_strategy}
 - 档位说明：{profile_hint}
-
-# 视觉/OCR线索
-{visual_context}
 
 # 输出要求
 1. 先给“AI看”轻量层，帮助用户快速决定怎么看、看哪里、哪些可以跳过。
@@ -575,24 +571,6 @@ def process_one_video(
         else:
             return "fail", "short"
 
-    visual_context = "暂无线索：本次只基于字幕/转写生成。"
-    if note_profile in {"ai_watch_l1", "ai_watch_l2", "ai_watch_l3"} and bvid:
-        try:
-            project_dir = os.path.dirname(audio_dir)
-            vc = build_visual_context(bvid, project_dir)
-            if vc.get("summary_text"):
-                visual_context = (
-                    "以下是从稀疏关键帧 OCR 得到的课件/屏幕文字线索，"
-                    "只能作为辅助证据，不代表完整视觉理解：\n"
-                    f"{vc['summary_text']}"
-                )
-                if source in {"CLI", "raw", "SV", "NOTE"}:
-                    source = f"{source}+OCR"
-            else:
-                visual_context = f"关键帧 OCR 未获得有效文字，状态：{vc.get('status', 'unknown')}。"
-        except Exception:
-            visual_context = "关键帧 OCR 失败，已自动降级为字幕/转写版。"
-
     prompt_template = AI_WATCH_PROMPT if str(note_profile).startswith("ai_watch") else FULL_PROMPT
     prompt = prompt_template.format(
         title=title,
@@ -600,7 +578,6 @@ def process_one_video(
         note_profile=note_profile,
         provider_strategy=provider_strategy,
         profile_hint=AI_WATCH_PROFILE_HINTS.get(note_profile, AI_WATCH_PROFILE_HINTS["ai_watch_l1"]),
-        visual_context=visual_context,
     )
     result = call_llm(prompt, 3600)
     if not result:
