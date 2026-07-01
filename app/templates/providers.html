@@ -18,7 +18,17 @@
 .pill-warn{background:rgba(251,191,36,.1);color:#fbbf24}
 .pill-off{background:rgba(248,113,113,.1);color:#f87171}
 .notes{color:#94a3b8;line-height:1.55;max-width:420px}
+.test-panel{margin-top:24px;padding-top:22px;border-top:1px solid rgba(148,163,184,.12)}
+.test-title{font-size:1rem;color:#f8fafc;font-weight:850;margin-bottom:12px}
+.test-grid{display:grid;grid-template-columns:140px 1fr;gap:12px}
+.field label{display:block;color:#94a3b8;font-size:.74rem;font-weight:800;margin-bottom:7px}
+.field input,.field select,.field textarea{width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.2);border-radius:12px;background:rgba(15,23,42,.76);color:#e2e8f0;padding:11px 12px;font-size:.88rem}
+.field textarea{min-height:76px;resize:vertical}
+.test-actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.result-box{margin-top:14px;border-radius:14px;background:rgba(15,23,42,.7);border:1px solid rgba(148,163,184,.14);padding:14px;color:#dbeafe;white-space:pre-wrap;line-height:1.65;min-height:54px}
+.muted{color:#94a3b8;font-size:.78rem}
 @media(max-width:800px){.policy-grid{grid-template-columns:1fr}.provider-table{display:block;overflow-x:auto;white-space:nowrap}}
+@media(max-width:800px){.test-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 {% block content %}
@@ -76,5 +86,71 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <div class="test-panel">
+    <div class="test-title">云端 AI看试跑</div>
+    <p class="hint">贴一张可公开访问的课程截图 URL，BiliFlow 会按当前可用 provider 优先级尝试 OCR 或视觉理解。这里不下载视频，只验证云端模型链路。</p>
+    <div class="test-grid">
+      <div class="field">
+        <label for="test-task">任务</label>
+        <select id="test-task">
+          <option value="ocr">OCR</option>
+          <option value="vision">视觉理解</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="test-image-url">图片 URL</label>
+        <input id="test-image-url" type="url" placeholder="https://example.com/course-screenshot.png">
+      </div>
+      <div></div>
+      <div class="field">
+        <label for="test-prompt">提示词</label>
+        <textarea id="test-prompt" placeholder="留空使用默认课程笔记模板"></textarea>
+      </div>
+    </div>
+    <div class="test-actions">
+      <button class="btn" type="button" id="run-provider-test">开始试跑</button>
+      <span class="muted" id="test-status">等待输入图片 URL</span>
+    </div>
+    <div class="result-box" id="test-result">结果会显示在这里。</div>
+  </div>
 </div>
+<script>
+const runBtn = document.getElementById("run-provider-test");
+const statusEl = document.getElementById("test-status");
+const resultEl = document.getElementById("test-result");
+
+runBtn.addEventListener("click", async () => {
+  const imageUrl = document.getElementById("test-image-url").value.trim();
+  const task = document.getElementById("test-task").value;
+  const prompt = document.getElementById("test-prompt").value.trim();
+  if (!imageUrl) {
+    statusEl.textContent = "请先输入图片 URL";
+    return;
+  }
+  runBtn.disabled = true;
+  statusEl.textContent = "正在调用云端模型...";
+  resultEl.textContent = "";
+  try {
+    const res = await fetch("/api/providers/test", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({task, image_url: imageUrl, prompt})
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== "ok") {
+      statusEl.textContent = "试跑失败";
+      resultEl.textContent = JSON.stringify(data, null, 2);
+      return;
+    }
+    statusEl.textContent = `${data.provider} / ${data.model} / ${data.elapsed_ms}ms`;
+    resultEl.textContent = data.content;
+  } catch (err) {
+    statusEl.textContent = "请求失败";
+    resultEl.textContent = String(err);
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+</script>
 {% endblock %}

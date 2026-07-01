@@ -21,6 +21,7 @@ import subprocess
 
 from config import config
 from db import get_db, init_db
+from ai_watch_providers import AIWatchProviderError, run_ai_watch_image
 from provider_registry import get_provider_status, recommended_models
 from bili_api import (
     extract_bvid_from_url,
@@ -64,6 +65,12 @@ def normalize_note_profile(value: str | None) -> str:
 def normalize_provider_strategy(value: str | None) -> str:
     value = (value or "auto_low_cost").strip()
     return value if value in PROVIDER_STRATEGIES else "auto_low_cost"
+
+
+class ProviderTestRequest(BaseModel):
+    task: str = "ocr"
+    image_url: str
+    prompt: str | None = None
 
 # 静态文件 + 模板
 os.makedirs("/app/static", exist_ok=True)
@@ -257,6 +264,31 @@ async def api_providers():
             "youtube_video": recommended_models("youtube_video"),
         },
     }
+
+
+@app.post("/api/providers/test")
+async def api_providers_test(req: ProviderTestRequest):
+    """Run a small cloud OCR/vision smoke test against the provider pool."""
+    task = req.task if req.task in {"ocr", "vision"} else "vision"
+    try:
+        return run_ai_watch_image(
+            task=task,
+            image_url=req.image_url,
+            prompt=req.prompt,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except AIWatchProviderError as e:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "status": "failed",
+                "message": str(e),
+                "attempts": e.attempts,
+            },
+        )
+    except Exception as e:
+        raise HTTPException(500, f"provider test failed: {e}")
 
 
 @app.post("/api/up")

@@ -25,7 +25,7 @@ class Config:
 
     # Gemini (via NewAPI)
     GEMINI_KEY: str = os.getenv("GEMINI_KEY", "")
-    GEMINI_BASE: str = os.getenv("GEMINI_BASE", "https://api.19991023.xyz/v1")
+    GEMINI_BASE: str = os.getenv("GEMINI_BASE", "https://litellm.19991023.xyz/v1")
     CHAT_MODEL: str = os.getenv("CHAT_MODEL", "gemini-3.5-flash")
 
     # Domain
